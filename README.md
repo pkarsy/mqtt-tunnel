@@ -157,8 +157,8 @@ Options:
 This project was originally inspired by [shirou/mqtunnel](https://github.com/shirou/mqtunnel). However, the two tools have diverged significantly:
 
 - **Command-line interface** is completely different and incompatible
-- **Wire protocol** has been modified and optimized for SSH use cases
-- **Focus:** While mqtunnel is a general-purpose tunnel, this tool is specifically designed and optimized for SSH proxying
+- **Wire protocol** has been modified
+- **Focus:** This tool is specifically focused on SSH proxying (the local instance uses stdio for SSH ProxyCommand integration)
 
 The tools cannot be used interchangeably.
 
@@ -172,11 +172,11 @@ The wire protocol may change in future versions. **When updating, always upgrade
 
 Since the protocol may change and you could lose access after an update, **always maintain an alternative way to access your remote server**, such as:
 - A second `mqtt-tunnel` instance running with a different topic
-- [gonc](https://github.com/bobvawter/gonc) or similar TCP hole-punching tool
+- [gonc](https://github.com/bobvawter/gonc) or similar UDP hole-punching tool
 - Traditional port forwarding or VPN
 
 This ensures you don't lock yourself out when updating the software.
 
 ## License
 
-[MIT License](LICENSE.txt)
+[Apache License 2.0](LICENSE.txt)
