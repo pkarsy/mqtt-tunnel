@@ -1,10 +1,10 @@
 # mqtt-tunnel
 
-Tunnel TCP connections (like SSH) through an MQTT broker. Access remote servers behind NAT/firewalls without open ports or static IPs.
+SSH proxy via MQTT broker — access servers behind any NAT without open ports.
 
 ## Overview
 
-**mqtt-tunnel** creates a TCP tunnel through an MQTT broker, allowing you to connect to remote SSH servers even when they're behind restrictive NAT (double NAT, symmetric NAT, etc.).
+**mqtt-tunnel** creates a TCP tunnel through an MQTT broker, allowing SSH connections to remote servers even when they're behind restrictive NAT (double NAT, symmetric NAT, etc.).
 
 - **No port forwarding** required
 - **Works with any NAT** configuration
