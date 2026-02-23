@@ -1,0 +1,28 @@
+# Compiled binary
+mqtt-tunnel
+*.exe
+
+# Go build artifacts
+*.o
+*.a
+*.so
+
+# Test binary
+*.test
+
+# Output of go coverage
+*.out
+
+# Dependency directories
+vendor/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
