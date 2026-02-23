@@ -42,12 +42,12 @@ Create `config.json` on **both** local and remote machines:
     "topic": "gFAftaCLyD"
 }
 ```
-> ⚠️ **Create your own topic!** Use `./mqtt-tunnel -topic generate` — don't copy this example.
+> ⚠️ **Create your own topic!** Use `mqtt-tunnel -topic generate` — don't copy this example.
 
 > **Topic Best Practices:** The topic acts as a shared secret. For public MQTT brokers:
 > - Use **10-20 random alphanumeric characters** (e.g., `gFAftaCLyD`)
 > - **Avoid slashes** (`/`) - they create topic hierarchies that may be accessible via wildcard subscriptions (`#` or `+`)
-> - Generate a secure topic with: `./mqtt-tunnel -topic generate`
+> - Generate a secure topic with: `mqtt-tunnel -topic generate`
 > 
 > **Security Note:** Anyone who knows or guesses your topic can disrupt (DoS) the SSH session by publishing to it, but they **cannot decrypt** the session content since SSH encryption is end-to-end. Keep your topic secret!
 
@@ -71,13 +71,13 @@ These services are provided for the common good. Please use responsibly—avoid 
 On the remote server (the one you want to SSH into):
 
 ```bash
-./mqtt-tunnel -c config.json -remote 127.0.0.1:22
+mqtt-tunnel -c config.json -remote 127.0.0.1:22
 ```
 
 Or without a config file:
 
 ```bash
-./mqtt-tunnel -broker mqtt://broker.hivemq.com:1883 -topic my-secret-topic-12345 -remote 127.0.0.1:22
+mqtt-tunnel -broker mqtt://broker.hivemq.com:1883 -topic my-secret-topic-12345 -remote 127.0.0.1:22
 ```
 
 **Auto-start on boot** (add to crontab with `crontab -e`):
@@ -107,7 +107,7 @@ ssh remote-via-mqtt
 To verify the tunnel works without SSH:
 
 ```bash
-./mqtt-tunnel -c config.json -local
+mqtt-tunnel -c config.json -local
 ```
 
 If you see the SSH server banner (e.g., `SSH-2.0-OpenSSH_8.9`), the tunnel is working.
@@ -117,7 +117,7 @@ If you see the SSH server banner (e.g., `SSH-2.0-OpenSSH_8.9`), the tunnel is wo
 Generate a sample config:
 
 ```bash
-./mqtt-tunnel -config help
+mqtt-tunnel -config help
 ```
 
 ## Command-Line Options
