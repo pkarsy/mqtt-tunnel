@@ -16,10 +16,10 @@ SSH proxy via MQTT broker — access servers behind any NAT without open ports.
 ## How It Works
 
 ```
-┌─────────────┐      ┌─────────────┐      ┌─────────────┐      ┌─────────────┐
-│   SSH Client │◄────►│ mqtt-tunnel │◄────►│ MQTT Broker │◄────►│ mqtt-tunnel │◄────►│ SSH Server  │
-│  (local)     │      │  (-stdio)   │      │             │      │  (-remote)  │      │  (remote)   │
-└─────────────┘      └─────────────┘      └─────────────┘      └─────────────┘      └─────────────┘
+┌──────────────┐     ┌──────────────┐     ┌──────────────┐     ┌──────────────┐     ┌──────────────┐
+│  SSH Client  │◄───►│ mqtt-tunnel  │◄───►│ MQTT Broker  │◄───►│ mqtt-tunnel  │◄───►│  SSH Server  │
+│   (local)    │     │  (-stdio)    │     │              │     │  (-remote)   │     │   (remote)   │
+└──────────────┘     └──────────────┘     └──────────────┘     └──────────────┘     └──────────────┘
 ```
 
 ## Installation
