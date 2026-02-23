@@ -134,7 +134,7 @@ Options:
   -password string     MQTT password
   -private-key string  Private key path
   -remote string       Remote target address (enables remote mode)
-  -stdio               Use stdio for tunnel (enables local mode)
+  -local               Use stdio for tunnel (enables local mode)
   -topic string        MQTT topic (use 'generate' to create a secure random topic)
   -username string     MQTT username
   -verbose             Enable verbose logging
