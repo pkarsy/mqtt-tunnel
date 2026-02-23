@@ -46,16 +46,20 @@ func printUsage() {
 
 func printSampleConfig() {
 	fmt.Println(`{
-    "broker": "mqtt://localhost:1883",
+    "broker": "mqtt://broker.hivemq.com:1883",
+    "topic": "gFAftaCLyD",
     "username": "",
     "password": "",
     "caCert": "",
     "clientCert": "",
     "privateKey": "",
-    "topic": "device/1/control",
     "remoteAddr": "127.0.0.1:22",
     "connectionTimeout": 15
-}`)
+}
+
+Required fields:
+  - broker: MQTT broker URL
+  - topic:  Control topic (generate with: mqtt-tunnel -topic generate)`)
 }
 
 func main() {
