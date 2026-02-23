@@ -39,7 +39,7 @@ func printUsage() {
 	flag.PrintDefaults()
 	fmt.Fprintf(os.Stderr, "\nExamples:\n")
 	fmt.Fprintf(os.Stderr, "  %s -topic generate (generate a secure random topic)\n", os.Args[0])
-	fmt.Fprintf(os.Stderr, "  %s -broker mqtt://localhost:1883 -topic device/1/control -stdio\n", os.Args[0])
+	fmt.Fprintf(os.Stderr, "  %s -broker mqtt://localhost:1883 -topic device/1/control -local\n", os.Args[0])
 	fmt.Fprintf(os.Stderr, "  %s -config config.json -remote 127.0.0.1:22\n", os.Args[0])
 	fmt.Fprintf(os.Stderr, "  %s -config help (print sample config)\n", os.Args[0])
 }
@@ -71,7 +71,7 @@ func main() {
 		privateKey        = flag.String("private-key", "", "private key path")
 		topic             = flag.String("topic", "", "control topic value (use 'generate' to create a secure random topic)")
 		remote            = flag.String("remote", "", "Enables remote mode. The address (usually 127.0.0.1:22) is the address of the target server (most probably SSH) as viewed by the remote mqtt-tunnel process")
-		stdio             = flag.Bool("stdio", false, "Enables local mode. Connects to remote instance and stdio is connected with the remote socket (use it with SSH ProxyCommand)")
+		local             = flag.Bool("local", false, "Enables local mode. Connects to remote instance and stdio is connected with the remote socket (use it with SSH ProxyCommand)")
 		connectionTimeout = flag.Int("connection-timeout", 15, "connection timeout in seconds")
 	)
 
@@ -151,9 +151,9 @@ func main() {
 		conf.RemoteAddr = *remote
 	}
 
-	// Validate mode: exactly one of -stdio or remote address must be specified
+	// Validate mode: exactly one of -local or remote address must be specified
 	modeCount := 0
-	if *stdio {
+	if *local {
 		modeCount++
 	}
 	if conf.RemoteAddr != "" {
@@ -161,7 +161,7 @@ func main() {
 	}
 
 	if modeCount != 1 {
-		log.Fatal("must specify exactly one mode: -stdio (local stdio) or -remote/remoteAddr (remote mode)")
+		log.Fatal("must specify exactly one mode: -local (local stdio) or -remote/remoteAddr (remote mode)")
 	}
 
 	// Set connection timeout from command line
@@ -174,7 +174,7 @@ func main() {
 
 	ctx := context.Background()
 
-	if *stdio {
+	if *local {
 		// Local mode using stdio (for SSH ProxyCommand)
 		if err := mqt.StartStdio(ctx, 0); err != nil {
 			log.Fatal(err)

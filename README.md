@@ -18,7 +18,7 @@ SSH proxy via MQTT broker — access servers behind any NAT without open ports.
 ```
 ┌──────────────┐     ┌──────────────┐     ┌──────────────┐     ┌──────────────┐     ┌──────────────┐
 │  SSH Client  │◄───►│ mqtt-tunnel  │◄───►│ MQTT Broker  │◄───►│ mqtt-tunnel  │◄───►│  SSH Server  │
-│   (local)    │     │  (-stdio)    │     │              │     │  (-remote)   │     │   (remote)   │
+│   (local)    │     │   (-local)   │     │              │     │  (-remote)   │     │   (remote)   │
 └──────────────┘     └──────────────┘     └──────────────┘     └──────────────┘     └──────────────┘
 ```
 
@@ -92,7 +92,7 @@ Add to your `~/.ssh/config`:
 ```
 Host remote-via-mqtt
     HostName remote-server
-    ProxyCommand /path/to/mqtt-tunnel -c /path/to/config.json -stdio
+    ProxyCommand /path/to/mqtt-tunnel -c /path/to/config.json -local
 ```
 
 Then connect:
@@ -106,7 +106,7 @@ ssh remote-via-mqtt
 To verify the tunnel works without SSH:
 
 ```bash
-./mqtt-tunnel -c config.json -stdio
+./mqtt-tunnel -c config.json -local
 ```
 
 If you see the SSH server banner (e.g., `SSH-2.0-OpenSSH_8.9`), the tunnel is working.
