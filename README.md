@@ -39,12 +39,13 @@ Create `config.json` on **both** local and remote machines:
 ```json
 {
     "broker": "mqtt://broker.hivemq.com:1883",
-    "topic": "a3f7b2e9d1"
+    "topic": "gFAftaCLyD"
 }
 ```
+> ⚠️ **Create your own topic!** Use `./mqtt-tunnel -topic generate` — don't copy this example.
 
 > **Topic Best Practices:** The topic acts as a shared secret. For public MQTT brokers:
-> - Use **10-20 random alphanumeric characters** (e.g., `a3f7b2e9d1`)
+> - Use **10-20 random alphanumeric characters** (e.g., `gFAftaCLyD`)
 > - **Avoid slashes** (`/`) - they create topic hierarchies that may be accessible via wildcard subscriptions (`#` or `+`)
 > - Generate a secure topic with: `./mqtt-tunnel -topic generate`
 > 
