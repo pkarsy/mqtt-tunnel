@@ -77,7 +77,7 @@ mqtt-tunnel -c config.json -remote 127.0.0.1:22
 Or without a config file:
 
 ```bash
-mqtt-tunnel -broker mqtt://broker.hivemq.com:1883 -topic my-secret-topic-12345 -remote 127.0.0.1:22
+mqtt-tunnel -broker mqtt://broker.hivemq.com:1883 -topic gFAftaCLyD -remote 127.0.0.1:22
 ```
 
 **Auto-start on boot** (add to crontab with `crontab -e`):
