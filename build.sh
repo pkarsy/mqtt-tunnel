@@ -100,9 +100,9 @@ build_termux() {
 
     mkdir -p "$output_dir"
 
-    GOMAXPROCS=1 GODEBUG=asyncpreemptoff=1 DNS=builtin \
-        CGO_ENABLED=0 GOOS=linux GOARCH=arm64 \
+    CGO_ENABLED=0 GOOS=linux GOARCH=arm64 \
         go build -ldflags="$ldflags" -trimpath \
+        -tags=termux \
         -o "$output_path" \
         "${SCRIPT_DIR}" 2>/dev/null
 
