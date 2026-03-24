@@ -1,12 +1,11 @@
 # Compiled binary
 mqtt-tunnel
-mqtt-tunnel.exe
-*.exe
+#mqtt-tunnel.exe
+#mqtt-tunnel-arm64
+#mqtt-tunnel-test
+mqtt-tunnel-*
 
-# Build output
 build/
-mqtt-tunnel-arm64
-mqtt-tunnel-test
 
 # Go build artifacts
 *.o
@@ -14,7 +13,7 @@ mqtt-tunnel-test
 *.so
 
 # Test binary
-*.test
+*test
 
 # Output of go coverage
 *.out
