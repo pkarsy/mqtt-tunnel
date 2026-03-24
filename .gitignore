@@ -33,3 +33,4 @@ vendor/
 Thumbs.db
 
 release.sh
+release/

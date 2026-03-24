@@ -245,7 +245,7 @@ Options:
 ### Maintenance
 
 Mqtt servers can have downtime. Also the protocol may change and you could lose access after an update, **always maintain an alternative way to access your remote server**, such as:
-- [gonc](https://github.com/bobvawter/gonc) or another UDP hole-punching tool. It is better for long session/large files, but may need a little more time to connect. For termux is more friendly to your mobile data(direct connection, no mqtt overhead)
+- [gonc](https://github.com/threatexpert/gonc) or another UDP hole-punching tool. It is better for long session/large files, but may need a little more time to connect. For termux is more friendly to your mobile data(direct connection, no mqtt overhead)
 - Traditional port forwarding or VPN
 - another mqtt-tunnel instance connecting to a different server. I do not recommend this it is confusing, you cannot tell with which instance you are connected.
 
