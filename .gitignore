@@ -1,0 +1,34 @@
+# Compiled binary
+mqtt-tunnel
+mqtt-tunnel.exe
+*.exe
+
+# Build output
+build/
+mqtt-tunnel-arm64
+mqtt-tunnel-test
+
+# Go build artifacts
+*.o
+*.a
+*.so
+
+# Test binary
+*.test
+
+# Output of go coverage
+*.out
+
+# Dependency directories
+vendor/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db

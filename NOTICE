@@ -1,0 +1,11 @@
+mqtt-tunnel
+Copyright 2026 Panagiotis Karagiannis
+
+This product was originally inspired by mqtunnel (https://github.com/shirou/mqtunnel)
+by Shirou WAKAYAMA.
+
+Portions of this software may contain code derived from mqtunnel, which is
+licensed under the Apache License 2.0.
+
+This software has been significantly modified and is now incompatible with
+the original mqtunnel in terms of command-line interface and wire protocol.
