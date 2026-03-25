@@ -56,7 +56,7 @@ build_binary() {
     local extra_flags="${5:-}"
 
     local version=$(get_version)
-    local ldflags="-s -w"
+    local ldflags="-s -w -X main.gitHash=${version}"
 
     local output_dir="${BUILD_DIR}/${os}-${arch}"
     local output_path="${output_dir}/${output_name}"
@@ -96,7 +96,7 @@ build_termux() {
     echo -n "Building linux/arm64 (termux)... "
 
     local version=$(get_version)
-    local ldflags="-s -w"
+    local ldflags="-s -w -X main.gitHash=${version}"
     local output_dir="${BUILD_DIR}/termux-arm64"
     local output_path="${output_dir}/mqtt-tunnel"
 

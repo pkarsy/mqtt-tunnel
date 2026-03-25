@@ -256,12 +256,18 @@ func main() {
 	if isServerMode {
 		log.Printf("[INFO] Server mode")
 		log.Printf("[INFO]   app-version=%s", Version)
+		if gitHash != "" {
+			log.Printf("[INFO]   git=%s", gitHash)
+		}
 		log.Printf("[INFO]   wire-protocol=%d", tunnel.ProtocolVersion)
 		log.Printf("[INFO]   root-topic=%s", conf.Topic)
 		log.Printf("[INFO]   addr=%s", conf.ServerAddr)
 	} else {
 		log.Printf("[INFO] Client mode")
 		log.Printf("[INFO]   app-version=%s", Version)
+		if gitHash != "" {
+			log.Printf("[INFO]   git=%s", gitHash)
+		}
 		log.Printf("[INFO]   wire-protocol=%d", tunnel.ProtocolVersion)
 		log.Printf("[INFO]   root-topic=%s", conf.Topic)
 	}
