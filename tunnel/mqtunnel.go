@@ -227,6 +227,7 @@ func (mqt *MQTunnel) handleControl(ctx context.Context, ctl controlPacket) error
 		if exists {
 			log.Printf("[INFO] ack received: tunnel_id=%s client_pub_topic=%s server_pub_topic=%s",
 				ctl.TunnelID, ctl.ClientPubTopic, ctl.ServerPubTopic)
+			log.Printf("[INFO] publishing to %s", ctl.ServerPubTopic)
 			tun.ClientPubTopic = ctl.ClientPubTopic
 			tun.ServerPubTopic = ctl.ServerPubTopic
 			if err := tun.setupLocalTunnel(ctx); err != nil {

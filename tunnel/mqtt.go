@@ -229,6 +229,8 @@ func (mqb *mqttBroker) connectWithRetry(ctx context.Context) error {
 func (mqb *mqttBroker) subscribeTunnelTopic(topic string, tunnel *Tunnel) error {
 	mqb.tunnelTopics[topic] = tunnel
 
+	log.Printf("[INFO] subscribing to %s", topic)
+
 	return mqb.subscribe()
 }
 
@@ -245,8 +247,6 @@ func (mqb *mqttBroker) subscribe() error {
 	if len(topics) == 0 {
 		return nil
 	}
-
-	log.Printf("[INFO] topic subscribing topic=%s", strings.Join(logTopic(topics), ", "))
 
 	subscribeToken := mqb.client.SubscribeMultiple(topics, mqb.onMessage)
 	if c := subscribeToken.WaitTimeout(mqttCommandsTimeout); !c {
@@ -302,6 +302,7 @@ func (mqb *mqttBroker) controlPacketReceived(msg mqtt.Message) error {
 
 func (mqb *mqttBroker) onConnect(client mqtt.Client) {
 	// log.Println("[INFO] connected")
+	log.Printf("[INFO] subscribing to %s", mqb.controlTopic)
 	if err := mqb.subscribe(); err != nil {
 		log.Printf("[ERROR] subscribe failed error=%v", err)
 	}
