@@ -4,6 +4,8 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 BUILD_DIR="${SCRIPT_DIR}/build"
 
+VERSION="0.5.1"
+
 show_usage() {
     cat << EOF
 Usage: $0 [target...]
@@ -54,7 +56,7 @@ build_binary() {
     local extra_flags="${5:-}"
 
     local version=$(get_version)
-    local ldflags="-s -w -X main.gitHash=${version}"
+    local ldflags="-s -w"
 
     local output_dir="${BUILD_DIR}/${os}-${arch}"
     local output_path="${output_dir}/${output_name}"
@@ -94,7 +96,7 @@ build_termux() {
     echo -n "Building linux/arm64 (termux)... "
 
     local version=$(get_version)
-    local ldflags="-s -w -X main.gitHash=${version}"
+    local ldflags="-s -w"
     local output_dir="${BUILD_DIR}/termux-arm64"
     local output_path="${output_dir}/mqtt-tunnel"
 
@@ -133,7 +135,7 @@ build_darwin() {
 }
 
 build_all() {
-    echo "Building mqtt-tunnel v$(get_version)"
+    echo "Building mqtt-tunnel v$VERSION"
     echo "================================"
     echo ""
 

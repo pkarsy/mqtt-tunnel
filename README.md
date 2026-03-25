@@ -236,14 +236,16 @@ ssh termux-mqtt -log-file /dev/tty
 
 **What to look for in the logs:**
 
-The startup log line shows critical connection details:
+The startup log lines show critical connection details:
 ```
-2026/03/25 07:12:51 [INFO] Client mode v0.5.1 (vee4b39c) wire-protocol v2 root-topic=Ktt91J5q
+2026/03/25 07:12:51 [INFO] Client mode
+2026/03/25 07:12:51 [INFO]   app-version=0.5.1
+2026/03/25 07:12:51 [INFO]   wire-protocol=2
+2026/03/25 07:12:51 [INFO]   root-topic=Ktt91J5q
 ```
 
-- **version**: Check if the client matches your server version
-- **git hash**: Git commit of this build (omit in production for privacy)
-- **wire-protocol**: Must match between client and server (currently v2)
+- **app-version**: Check if the client matches your server version
+- **wire-protocol**: Must match between client and server (currently 2)
 - **root-topic**: Verify this matches your server's topic
 
 **Common log messages:**

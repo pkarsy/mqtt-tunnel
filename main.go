@@ -254,9 +254,16 @@ func main() {
 
 	// Log the mode of operation
 	if isServerMode {
-		log.Printf("[INFO] Server mode v%s (%s) wire-protocol v%d root-topic=%s addr=%s", Version, gitHash, tunnel.ProtocolVersion, conf.Topic, conf.ServerAddr)
+		log.Printf("[INFO] Server mode")
+		log.Printf("[INFO]   app-version=%s", Version)
+		log.Printf("[INFO]   wire-protocol=%d", tunnel.ProtocolVersion)
+		log.Printf("[INFO]   root-topic=%s", conf.Topic)
+		log.Printf("[INFO]   addr=%s", conf.ServerAddr)
 	} else {
-		log.Printf("[INFO] Client mode v%s (%s) wire-protocol v%d root-topic=%s", Version, gitHash, tunnel.ProtocolVersion, conf.Topic)
+		log.Printf("[INFO] Client mode")
+		log.Printf("[INFO]   app-version=%s", Version)
+		log.Printf("[INFO]   wire-protocol=%d", tunnel.ProtocolVersion)
+		log.Printf("[INFO]   root-topic=%s", conf.Topic)
 	}
 
 	mqt, err := tunnel.NewMQTunnel(conf, isServerMode)
