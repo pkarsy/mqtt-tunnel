@@ -226,6 +226,42 @@ Options:
   -verbose             Enable verbose logging
 ```
 
+## Troubleshooting
+
+When connection issues arise, the first step is to enable verbose logging to see what's happening:
+
+```bash
+ssh termux-mqtt -log-file /dev/tty
+```
+
+**What to look for in the logs:**
+
+The startup log line shows critical connection details:
+```
+2026/03/25 07:12:51 [INFO] Client mode v0.5.1 protocol=2 root-topic=Ktt91J5q
+```
+
+- **version**: Check if the client matches your server version
+- **protocol**: Must match between client and server (currently protocol=2)
+- **root-topic**: Verify this matches your server's topic
+
+**Common log messages:**
+
+| Message | Meaning |
+|---------|---------|
+| `Client mode` / `Server mode` | Successfully determined mode |
+| `successfully connected to MQTT broker` | MQTT connection working |
+| `topic subscribing` | Subscribed to control topics |
+| `ack received` | Server acknowledged connection, topics assigned |
+| `protocol version mismatch` | Client and server have different protocol versions - update both |
+
+**Still having issues?**
+
+- Ensure the server is running first, then connect the client
+- Verify the topic matches between client and server config
+- Check that the MQTT broker URL is accessible from both machines
+- For TLS issues, verify certificates are correct
+
 ## Security Considerations
 
 > ⚠️ **This tool provides no encryption.** The MQTT tunnel itself is unencrypted.
