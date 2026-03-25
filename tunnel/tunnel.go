@@ -173,10 +173,16 @@ func (tun *Tunnel) mainLoop(ctx context.Context) {
 			if !ok {
 				c := tun.createConnectionClosed()
 				debugf("connection closed client_pub_topic=%s size=%d", tun.ClientPubTopic, len(b))
-				tun.mqttBroker.publish(ctx, tun.mqttBroker.controlTopic, 0, false, c)
+				token := tun.mqttBroker.publish(ctx, tun.mqttBroker.controlTopic, 0, false, c)
+				token.Wait()
 				if len(b) > 0 {
 					// send last bytes
-					tun.mqttBroker.publish(ctx, tun.ClientPubTopic, 0, false, b)
+					token = tun.mqttBroker.publish(ctx, tun.ClientPubTopic, 0, false, b)
+					token.Wait()
+				}
+				// Signal exit for client mode (bypasses MQTT)
+				if !tun.mqttBroker.isServerMode {
+					tun.mqttBroker.tunnelDoneCh <- struct{}{}
 				}
 				return
 			}

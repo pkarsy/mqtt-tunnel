@@ -82,8 +82,9 @@ type mqttBroker struct {
 	tunnelTopics     map[string]*Tunnel // topic: tunnel
 	isServerMode     bool               // true for server mode, false for client mode
 
-	controlCh   chan controlPacket
-	reconnectCh chan bool // signals that reconnection is needed (server mode)
+	controlCh    chan controlPacket
+	reconnectCh  chan bool     // signals that reconnection is needed (server mode)
+	tunnelDoneCh chan struct{} // signals when tunnel closes (client mode)
 }
 
 const mqttCommandsTimeout = 30 * time.Second
@@ -102,8 +103,9 @@ func NewMQTTBroker(conf Config, controlCh chan controlPacket, isServerMode bool)
 
 		controlTopic: ControlTopic(conf.Topic),
 
-		controlCh:   controlCh,
-		reconnectCh: make(chan bool),
+		controlCh:    controlCh,
+		reconnectCh:  make(chan bool),
+		tunnelDoneCh: make(chan struct{}),
 	}
 
 	opts, err := getMQTTOptions(conf, clientID)

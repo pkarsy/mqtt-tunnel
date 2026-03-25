@@ -74,6 +74,10 @@ func (mqt *MQTunnel) StartStdio(ctx context.Context, remotePort int) error {
 				log.Printf("[ERROR] handleControl failed error=%v", err)
 			}
 
+		case <-mqt.mqttBroker.tunnelDoneCh:
+			mqt.mqttBroker.client.Disconnect(250)
+			return nil
+
 		case <-mqt.localCh:
 			tun, err := NewTunnelFromConnect(ctx, mqt.mqttBroker, conn, 0, remotePort)
 			if err != nil {
