@@ -357,14 +357,11 @@ func (mqb *mqttBroker) controlPacketReceived(msg mqtt.Message) error {
 				return nil
 			}
 		}
-		// Protocol v2: allow missing origin for backward compatibility
 		// Protocol v3+: missing origin = drop
-		if control.Origin == "" {
-			if control.Version >= 3 {
-				debugf("origin missing (protocol v%d), dropping tunnel_id=%s", control.Version, control.TunnelID)
-				return nil
-			}
-			debugf("outdated client message (protocol v%d), accepting tunnel_id=%s", control.Version, control.TunnelID)
+		// Exception: failure messages from older servers must be accepted
+		if control.Origin == "" && control.Type != controlTypeFailure {
+			debugf("origin missing, dropping tunnel_id=%s", control.TunnelID)
+			return nil
 		}
 	} else {
 		// Validate control type for client mode
@@ -389,14 +386,11 @@ func (mqb *mqttBroker) controlPacketReceived(msg mqtt.Message) error {
 			// Drop silently - not our tunnel
 			return nil
 		}
-		// Protocol v2: allow missing origin for backward compatibility
 		// Protocol v3+: missing origin = drop
-		if control.Origin == "" {
-			if control.Version >= 3 {
-				debugf("origin missing (protocol v%d), dropping tunnel_id=%s", control.Version, control.TunnelID)
-				return nil
-			}
-			debugf("outdated server message (protocol v%d), accepting tunnel_id=%s", control.Version, control.TunnelID)
+		// Exception: failure messages from older servers must be accepted
+		if control.Origin == "" && control.Type != controlTypeFailure {
+			debugf("origin missing, dropping tunnel_id=%s", control.TunnelID)
+			return nil
 		}
 	}
 

@@ -7,6 +7,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"strings"
 	"sync"
 	"time"
 )
@@ -282,6 +283,11 @@ func (mqt *MQTunnel) handleControl(ctx context.Context, ctl controlPacket) error
 			return nil
 		}
 		log.Printf("[ERROR] server reported failure: tunnel_id=%s reason=%s", ctl.TunnelID, ctl.Reason)
+		// Add hint for protocol version mismatch
+		if strings.Contains(ctl.Reason, "protocol version mismatch") {
+			log.Printf("[HINT] Server is running an older version. Please upgrade the server to 0.6.0+")
+			log.Printf("[HINT] Or temporarily use mqtt-tunnel 0.5.0 on client side")
+		}
 		tun, exists := mqt.ackWaiting[ctl.TunnelID]
 		if exists {
 			delete(mqt.ackWaiting, ctl.TunnelID)

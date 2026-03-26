@@ -106,6 +106,24 @@ mqtt-tunnel -broker mqtt://broker.hivemq.com:1883 -topic gFAftaCLyD -server :22
 
 ### 3. Configure SSH on client machine
 
+**Important:** Before configuring SSH, first test the tunnel standalone to verify it connects successfully:
+
+```bash
+mqtt-tunnel -c client.json
+```
+
+You should see the SSH server banner (e.g., `SSH-2.0-OpenSSH_8.9`). If you see errors like "protocol version mismatch", you may need to upgrade the server. Once verified working, proceed with SSH configuration below.
+
+To always see mqtt-tunnel progress messages when using SSH, add `"log-file": "/dev/tty"` to your `client.json` (Linux/macOS):
+
+```json
+{
+    "broker": "mqtt://broker.hivemq.com:1883",
+    "topic": "YOUR_TOPIC",
+    "log-file": "/dev/tty"
+}
+```
+
 Add to your `~/.ssh/config`:
 
 ```
