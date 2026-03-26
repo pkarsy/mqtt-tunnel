@@ -50,6 +50,7 @@ func NewMQTunnel(conf Config, isServerMode bool) (*MQTunnel, error) {
 		return nil, fmt.Errorf("MQTT connection error, %w", err)
 	}
 	ret.mqttBroker = mqBroker
+	ret.mqttBroker.SetTunnelMaps(ret.connected, ret.ackWaiting)
 
 	return &ret, nil
 }
@@ -175,14 +176,21 @@ func (mqt *MQTunnel) StartRemote(ctx context.Context) error {
 				return fmt.Errorf("failed to reconnect: %w", err)
 			}
 			log.Println("[INFO] successfully reconnected to MQTT broker")
-			// Note: Paho auto-reconnect already reconnected, but we closed tunnels above
-			// and resubscribed via onConnect. New tunnels can now be established.
+
+		case tunnelID := <-mqt.mqttBroker.tunnelClosedCh:
+			// Tunnel closed (server's TCP to SSH dropped) - cleanup connected map
+			mqt.mu.Lock()
+			if _, exists := mqt.connected[tunnelID]; exists {
+				log.Printf("[INFO] tunnel closed, removing from connected tunnel_id=%s", tunnelID)
+				delete(mqt.connected, tunnelID)
+			}
+			mqt.mu.Unlock()
+
 		case <-ctx.Done():
 			return ctx.Err()
 		}
 	}
 }
-
 func (mqt *MQTunnel) handleControl(ctx context.Context, ctl controlPacket) error {
 
 	switch ctl.Type {
@@ -284,6 +292,10 @@ func (mqt *MQTunnel) handleControl(ctx context.Context, ctl controlPacket) error
 		if exists {
 			tun.cancel()
 			delete(mqt.connected, ctl.TunnelID)
+		}
+		// Client mode: ALWAYS exit when server signals tunnel closed
+		if !mqt.isServerMode {
+			mqt.mqttBroker.tunnelDoneCh <- struct{}{}
 		}
 	default:
 		return fmt.Errorf("unknown control type, %s", ctl.Type)

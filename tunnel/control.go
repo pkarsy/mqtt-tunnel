@@ -16,12 +16,13 @@ const (
 	controlTypeConnectionClosed controlType = "closed"
 )
 
-const ProtocolVersion = 2
+const ProtocolVersion = 3
 
 type controlPacket struct {
 	Type     controlType `json:"type"`
 	TunnelID string      `json:"tunnel_id,omitempty"`
 	Version  int         `json:"version,omitempty"`
+	Origin   string      `json:"origin,omitempty"` // "client" or "server"
 
 	LocalPort      int    `json:"local_port,omitempty"`
 	ClientPubTopic string `json:"client_pub_topic,omitempty"`

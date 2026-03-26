@@ -171,10 +171,17 @@ func (tun *Tunnel) mainLoop(ctx context.Context) {
 			}
 		case b, ok := <-tun.publishCh:
 			if !ok {
+				debugf("publishCh closed - sending connection_closed")
 				c := tun.createConnectionClosed()
-				debugf("connection closed client_pub_topic=%s size=%d", tun.ClientPubTopic, len(b))
-				token := tun.mqttBroker.publish(ctx, tun.mqttBroker.controlTopic, 0, false, c)
+				buf, _ := json.Marshal(c)
+				debugf("connection closed client_pub_topic=%s size=%d", tun.ClientPubTopic, len(buf))
+				token := tun.mqttBroker.publish(ctx, tun.mqttBroker.controlTopic, 0, false, buf)
 				token.Wait()
+				if token.Error() != nil {
+					debugf("connection_closed publish FAILED: %v", token.Error())
+				} else {
+					debugf("connection_closed published successfully")
+				}
 				if len(b) > 0 {
 					// send last bytes
 					token = tun.mqttBroker.publish(ctx, tun.ClientPubTopic, 0, false, b)
@@ -183,6 +190,11 @@ func (tun *Tunnel) mainLoop(ctx context.Context) {
 				// Signal exit for client mode (bypasses MQTT)
 				if !tun.mqttBroker.isServerMode {
 					tun.mqttBroker.tunnelDoneCh <- struct{}{}
+				}
+				// Signal cleanup for server mode (sends tunnel ID)
+				if tun.mqttBroker.isServerMode {
+					debugf("sending tunnelClosedCh signal")
+					tun.mqttBroker.tunnelClosedCh <- tun.ID
 				}
 				return
 			}
@@ -201,6 +213,7 @@ func (tun *Tunnel) createConnectRequest() controlPacket {
 		Version:    ProtocolVersion,
 		LocalPort:  tun.LocalPort,
 		RemotePort: tun.RemotePort,
+		Origin:     "client",
 	}
 	return ret
 }
@@ -210,13 +223,19 @@ func (tun *Tunnel) createAck() controlPacket {
 		TunnelID:       tun.ID,
 		ClientPubTopic: tun.ServerPubTopic,
 		ServerPubTopic: tun.ClientPubTopic,
+		Origin:         "server",
 	}
 	return ret
 }
 func (tun *Tunnel) createConnectionClosed() controlPacket {
+	origin := "client"
+	if tun.mqttBroker.isServerMode {
+		origin = "server"
+	}
 	ret := controlPacket{
 		Type:     controlTypeConnectionClosed,
 		TunnelID: tun.ID,
+		Origin:   origin,
 	}
 	return ret
 }
@@ -225,6 +244,7 @@ func (tun *Tunnel) createConnectConfirm() controlPacket {
 	ret := controlPacket{
 		Type:     controlTypeConnectConfirm,
 		TunnelID: tun.ID,
+		Origin:   "client",
 	}
 	return ret
 }
@@ -234,6 +254,7 @@ func createFailure(tunnelID, reason string) controlPacket {
 		Type:     controlTypeFailure,
 		TunnelID: tunnelID,
 		Reason:   reason,
+		Origin:   "server",
 	}
 	return ret
 }

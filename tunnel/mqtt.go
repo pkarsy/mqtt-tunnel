@@ -82,9 +82,14 @@ type mqttBroker struct {
 	tunnelTopics     map[string]*Tunnel // topic: tunnel
 	isServerMode     bool               // true for server mode, false for client mode
 
-	controlCh    chan controlPacket
-	reconnectCh  chan bool     // signals that reconnection is needed (server mode)
-	tunnelDoneCh chan struct{} // signals when tunnel closes (client mode)
+	controlCh      chan controlPacket
+	reconnectCh    chan bool     // signals that reconnection is needed (server mode)
+	tunnelDoneCh   chan struct{} // signals when tunnel closes (client mode)
+	tunnelClosedCh chan string   // signals when tunnel closes (server mode, sends tunnel ID)
+
+	// References to MQTunnel maps for filtering
+	connected  *map[string]*Tunnel
+	ackWaiting *map[string]*Tunnel
 }
 
 const mqttCommandsTimeout = 30 * time.Second
@@ -103,9 +108,13 @@ func NewMQTTBroker(conf Config, controlCh chan controlPacket, isServerMode bool)
 
 		controlTopic: ControlTopic(conf.Topic),
 
-		controlCh:    controlCh,
-		reconnectCh:  make(chan bool),
-		tunnelDoneCh: make(chan struct{}),
+		controlCh:      controlCh,
+		reconnectCh:    make(chan bool),
+		tunnelDoneCh:   make(chan struct{}, 1),  // Buffered to avoid deadlock in client exit
+		tunnelClosedCh: make(chan string),
+
+		connected:  nil,
+		ackWaiting: nil,
 	}
 
 	opts, err := getMQTTOptions(conf, clientID)
@@ -133,6 +142,12 @@ func NewMQTTBroker(conf Config, controlCh chan controlPacket, isServerMode bool)
 	}
 
 	return &ret, nil
+}
+
+// SetTunnelMaps sets the connected and ackWaiting map references for filtering
+func (mqb *mqttBroker) SetTunnelMaps(connected, ackWaiting map[string]*Tunnel) {
+	mqb.connected = &connected
+	mqb.ackWaiting = &ackWaiting
 }
 
 func (mqb *mqttBroker) start(ctx context.Context) error {
@@ -298,6 +313,64 @@ func (mqb *mqttBroker) controlPacketReceived(msg mqtt.Message) error {
 	if err := json.Unmarshal(msg.Payload(), &control); err != nil {
 		return fmt.Errorf("unmarshal error, %v", err)
 	}
+
+	// Filter based on origin and mode
+	if mqb.isServerMode {
+		// Server mode filtering
+		if control.Type == controlTypeConnectRequest {
+			// Always accept connect requests (new tunnels)
+			mqb.controlCh <- control
+			return nil
+		}
+		// Check if tunnel exists
+		//_, tunExists := mqb.tunnelTopics[control.TunnelID]
+		//_, connectedExists := (*mqb.connected)[control.TunnelID]
+		//_, ackWaitingExists := (*mqb.ackWaiting)[control.TunnelID]
+		//tunnelKnown := tunExists || connectedExists || ackWaitingExists
+
+		if control.Origin == "server" {
+			debugf("rejecting our(server) message tunnel_id=%s", control.TunnelID)
+			return nil
+		}
+		//if control.Type == "connect_confirm"  && ! ackWaitingExists  {
+		//	debugf("unknown tunnel_id=%s, dropping", control.TunnelID)
+		//	return nil
+		//}
+		// Protocol v2: allow missing origin for backward compatibility
+		// Protocol v3+: missing origin = drop
+		if control.Origin == "" {
+			if control.Version >= 3 {
+				debugf("origin missing (protocol v%d), dropping tunnel_id=%s", control.Version, control.TunnelID)
+				return nil
+			}
+			debugf("outdated client message (protocol v%d), accepting tunnel_id=%s", control.Version, control.TunnelID)
+		}
+	} else {
+		// Client mode filtering
+		if control.Origin == "client" {
+			debugf("rejecting own message tunnel_id=%s", control.TunnelID)
+			return nil
+		}
+		// Client only knows about its own tunnel ID from ackWaiting or connected
+		_, connectedExists := (*mqb.connected)[control.TunnelID]
+		_, ackWaitingExists := (*mqb.ackWaiting)[control.TunnelID]
+		tunnelKnown := connectedExists || ackWaitingExists
+
+		if !tunnelKnown {
+			// Drop silently - not our tunnel
+			return nil
+		}
+		// Protocol v2: allow missing origin for backward compatibility
+		// Protocol v3+: missing origin = drop
+		if control.Origin == "" {
+			if control.Version >= 3 {
+				debugf("origin missing (protocol v%d), dropping tunnel_id=%s", control.Version, control.TunnelID)
+				return nil
+			}
+			debugf("outdated server message (protocol v%d), accepting tunnel_id=%s", control.Version, control.TunnelID)
+		}
+	}
+
 	mqb.controlCh <- control
 	return nil
 }
