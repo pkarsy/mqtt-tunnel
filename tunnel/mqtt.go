@@ -88,8 +88,9 @@ type mqttBroker struct {
 	tunnelClosedCh chan string   // signals when tunnel closes (server mode, sends tunnel ID)
 
 	// References to MQTunnel maps for filtering
-	connected  *map[string]*Tunnel
-	ackWaiting *map[string]*Tunnel
+	connected       *map[string]*Tunnel
+	ackWaiting      *map[string]*Tunnel
+	pendingConfirms *map[string]*Tunnel
 }
 
 const mqttCommandsTimeout = 30 * time.Second
@@ -144,10 +145,11 @@ func NewMQTTBroker(conf Config, controlCh chan controlPacket, isServerMode bool)
 	return &ret, nil
 }
 
-// SetTunnelMaps sets the connected and ackWaiting map references for filtering
-func (mqb *mqttBroker) SetTunnelMaps(connected, ackWaiting map[string]*Tunnel) {
+// SetTunnelMaps sets the connected, ackWaiting, and pendingConfirms map references for filtering
+func (mqb *mqttBroker) SetTunnelMaps(connected, ackWaiting, pendingConfirms map[string]*Tunnel) {
 	mqb.connected = &connected
 	mqb.ackWaiting = &ackWaiting
+	mqb.pendingConfirms = &pendingConfirms
 }
 
 func (mqb *mqttBroker) start(ctx context.Context) error {
@@ -316,26 +318,45 @@ func (mqb *mqttBroker) controlPacketReceived(msg mqtt.Message) error {
 
 	// Filter based on origin and mode
 	if mqb.isServerMode {
-		// Server mode filtering
-		if control.Type == controlTypeConnectRequest {
-			// Always accept connect requests (new tunnels)
-			mqb.controlCh <- control
+		// Validate control type for server mode
+		switch control.Type {
+		case controlTypeConnectRequest, controlTypeConnectConfirm, controlTypeConnectionClosed:
+			// Valid server types, continue processing
+		default:
+			debugf("invalid type=%s for server, dropping", control.Type)
 			return nil
 		}
-		// Check if tunnel exists
-		//_, tunExists := mqb.tunnelTopics[control.TunnelID]
-		//_, connectedExists := (*mqb.connected)[control.TunnelID]
-		//_, ackWaitingExists := (*mqb.ackWaiting)[control.TunnelID]
-		//tunnelKnown := tunExists || connectedExists || ackWaitingExists
-
+		// Server mode filtering
 		if control.Origin == "server" {
 			debugf("rejecting our(server) message tunnel_id=%s", control.TunnelID)
 			return nil
 		}
-		//if control.Type == "connect_confirm"  && ! ackWaitingExists  {
-		//	debugf("unknown tunnel_id=%s, dropping", control.TunnelID)
-		//	return nil
-		//}
+		// Validate connect_confirm is for a known pending tunnel
+		if control.Type == controlTypeConnectConfirm {
+			_, pendingExists := (*mqb.pendingConfirms)[control.TunnelID]
+			if !pendingExists {
+				debugf("unknown tunnel_id=%s, dropping", control.TunnelID)
+				return nil
+			}
+		}
+		// Validate connect request tunnel_id is not already in use
+		if control.Type == controlTypeConnectRequest {
+			_, connectedExists := (*mqb.connected)[control.TunnelID]
+			_, pendingExists := (*mqb.pendingConfirms)[control.TunnelID]
+			if connectedExists || pendingExists {
+				debugf("tunnel_id already in use=%s, dropping", control.TunnelID)
+				return nil
+			}
+		}
+		// Validate connection_closed is for a known tunnel
+		if control.Type == controlTypeConnectionClosed {
+			_, connectedExists := (*mqb.connected)[control.TunnelID]
+			_, pendingExists := (*mqb.pendingConfirms)[control.TunnelID]
+			if !connectedExists && !pendingExists {
+				debugf("connection_closed for unknown tunnel_id=%s, dropping", control.TunnelID)
+				return nil
+			}
+		}
 		// Protocol v2: allow missing origin for backward compatibility
 		// Protocol v3+: missing origin = drop
 		if control.Origin == "" {
@@ -346,6 +367,14 @@ func (mqb *mqttBroker) controlPacketReceived(msg mqtt.Message) error {
 			debugf("outdated client message (protocol v%d), accepting tunnel_id=%s", control.Version, control.TunnelID)
 		}
 	} else {
+		// Validate control type for client mode
+		switch control.Type {
+		case controlTypeConnectAck, controlTypeFailure, controlTypeConnectionClosed:
+			// Valid client types, continue processing
+		default:
+			debugf("invalid type=%s for client, dropping", control.Type)
+			return nil
+		}
 		// Client mode filtering
 		if control.Origin == "client" {
 			debugf("rejecting own message tunnel_id=%s", control.TunnelID)

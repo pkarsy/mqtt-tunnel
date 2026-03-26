@@ -50,7 +50,7 @@ func NewMQTunnel(conf Config, isServerMode bool) (*MQTunnel, error) {
 		return nil, fmt.Errorf("MQTT connection error, %w", err)
 	}
 	ret.mqttBroker = mqBroker
-	ret.mqttBroker.SetTunnelMaps(ret.connected, ret.ackWaiting)
+	ret.mqttBroker.SetTunnelMaps(ret.connected, ret.ackWaiting, ret.pendingConfirms)
 
 	return &ret, nil
 }
@@ -290,8 +290,13 @@ func (mqt *MQTunnel) handleControl(ctx context.Context, ctl controlPacket) error
 	case controlTypeConnectionClosed:
 		tun, exists := mqt.connected[ctl.TunnelID]
 		if exists {
+			tun.closedByRemote = true // Mark that remote initiated close
 			tun.cancel()
 			delete(mqt.connected, ctl.TunnelID)
+			// Explicitly close TCP connection to unblock handleRead and cleanup
+			if tun.tcpConnection != nil && tun.tcpConnection.conn != nil {
+				tun.tcpConnection.conn.Close()
+			}
 		}
 		// Client mode: ALWAYS exit when server signals tunnel closed
 		if !mqt.isServerMode {

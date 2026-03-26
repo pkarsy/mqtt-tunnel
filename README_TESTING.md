@@ -30,7 +30,7 @@ go build -o mqtt-tunnel
 This terminal simulates a remote SSH server that echoes back any input it receives:
 
 ```bash
-socat -T 60 TCP-LISTEN:7022,fork SYSTEM:'echo "SOCAT" ; while IFS= read -r line; do echo "ECHO: $line"; echo $line>/dev/tty ; done'
+socat -T 60 TCP-LISTEN:7022,fork SYSTEM:'echo "SOCAT: CONNECTED" ; while IFS= read -r line; do echo "ECHO: $line"; echo $line>/dev/tty ; done; echo "SOCAT: CLOSED" >/dev/tty'
 ```
 
 **What it does:**

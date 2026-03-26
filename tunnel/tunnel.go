@@ -17,6 +17,7 @@ type Tunnel struct {
 	RemotePort     int
 	ServerPubTopic string // topic where server publishes data
 	Confirmed      bool   // true when client has sent connect_confirm
+	closedByRemote bool   // true if close was initiated by remote side
 
 	tcpConnection *TCPConnection
 	mqttBroker    *mqttBroker
@@ -171,21 +172,24 @@ func (tun *Tunnel) mainLoop(ctx context.Context) {
 			}
 		case b, ok := <-tun.publishCh:
 			if !ok {
-				debugf("publishCh closed - sending connection_closed")
-				c := tun.createConnectionClosed()
-				buf, _ := json.Marshal(c)
-				debugf("connection closed client_pub_topic=%s size=%d", tun.ClientPubTopic, len(buf))
-				token := tun.mqttBroker.publish(ctx, tun.mqttBroker.controlTopic, 0, false, buf)
-				token.Wait()
-				if token.Error() != nil {
-					debugf("connection_closed publish FAILED: %v", token.Error())
-				} else {
-					debugf("connection_closed published successfully")
-				}
-				if len(b) > 0 {
-					// send last bytes
-					token = tun.mqttBroker.publish(ctx, tun.ClientPubTopic, 0, false, b)
+				// Only send connection_closed if remote didn't already initiate close
+				if !tun.closedByRemote {
+					debugf("publishCh closed - sending connection_closed")
+					c := tun.createConnectionClosed()
+					buf, _ := json.Marshal(c)
+					debugf("connection closed client_pub_topic=%s size=%d", tun.ClientPubTopic, len(buf))
+					token := tun.mqttBroker.publish(ctx, tun.mqttBroker.controlTopic, 0, false, buf)
 					token.Wait()
+					if token.Error() != nil {
+						debugf("connection_closed publish FAILED: %v", token.Error())
+					} else {
+						debugf("connection_closed published successfully")
+					}
+					if len(b) > 0 {
+						// send last bytes
+						token = tun.mqttBroker.publish(ctx, tun.ClientPubTopic, 0, false, b)
+						token.Wait()
+					}
 				}
 				// Signal exit for client mode (bypasses MQTT)
 				if !tun.mqttBroker.isServerMode {
