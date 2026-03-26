@@ -84,7 +84,12 @@ func expandServerAddr(addr string) string {
 
 func printUsage() {
 	fmt.Fprintf(os.Stderr, "Usage: %s [options]\n\n", os.Args[0])
-	fmt.Fprintf(os.Stderr, "SSH proxy via MQTT broker\n")
+	fmt.Fprintf(os.Stderr, "SSH proxy via MQTT\n")
+	fmt.Fprintf(os.Stderr, "Version: %s", Version)
+	if gitHash != "" {
+		fmt.Fprintf(os.Stderr, " (git: %s)", gitHash)
+	}
+	fmt.Fprintln(os.Stderr)
 	if info := getPlatformInfo(); info != "" {
 		fmt.Fprintf(os.Stderr, "%s\n", info)
 	}

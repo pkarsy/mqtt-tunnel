@@ -198,12 +198,11 @@ mqtt-tunnel -broker mqtt://broker.hivemq.com:1883 -topic YOUR_TOPIC -server :802
 
 # On laptop (~/.ssh/config):
 Host termux-phone
-    HostName localhost
-    Port 8022
-    User u0_a123  # Your Termux user (run 'whoami' in Termux)
-    ServerAliveInterval 5
-    ServerAliveCountMax 2
-    ProxyCommand /path/to/mqtt-tunnel -broker mqtt://broker.hivemq.com:1883 -topic YOUR_TOPIC
+    HostName termux
+    ServerAliveInterval 10
+    ServerAliveCountMax 3
+    ProxyCommand -c /path/to/client.json
+    # or ProxyCommand /path/to/mqtt-tunnel -broker mqtt://broker.hivemq.com:1883 -topic YOUR_TOPIC
 ```
 
 ### 4. Test the Connection
@@ -211,7 +210,7 @@ Host termux-phone
 To verify the tunnel works without using SSH:
 
 ```bash
-mqtt-tunnel -c client.json
+mqtt-tunnel -c /path/to/client.json
 ```
 
 If you can see the SSH server banner (e.g., `SSH-2.0-OpenSSH_8.9`), the tunnel is working
@@ -227,29 +226,15 @@ mqtt-tunnel -config help
 ## Command-Line Options
 
 ```
-Usage: mqtt-tunnel [options]
-
-Options:
-  -broker string        MQTT broker URL
-  -c string            Config file path
-  -ca-cert string      CA certificate path
-  -client-cert string  Client certificate path
-  -connection-timeout int   Connection timeout in seconds (default 15)
-  -log-file string     Log file path
-  -password string     MQTT password
-  -private-key string  Private key path
-  -server string       Server target address (absence implies client mode)
-  -topic string        MQTT topic (use 'generate' to create a secure random topic)
-  -username string     MQTT username
-  -verbose             Enable verbose logging
+mqtt-tunnel -help
 ```
 
 ## Troubleshooting
 
-When connection issues arise, the first step is to enable verbose logging to see what's happening:
+When connection issues arise, the first step is to enable verbose logging to see what's happening run :
 
 ```bash
-ssh termux-mqtt -log-file /dev/tty
+termux-mqtt -c client.json
 ```
 
 **What to look for in the logs:**
