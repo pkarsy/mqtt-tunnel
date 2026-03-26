@@ -44,6 +44,10 @@ type Config struct {
 	// ConnectionTimeout is the maximum time to wait for tunnel establishment (in seconds)
 	// Default: 15 seconds
 	ConnectionTimeout int `json:"connection-timeout"`
+
+	// MqttKeepalive is the MQTT ping interval in seconds
+	// Default: 60 seconds
+	MqttKeepalive int `json:"mqtt-keepalive"`
 }
 
 func ReadConfig(filePath string) (Config, error) {
@@ -73,6 +77,7 @@ func ReadConfig(filePath string) (Config, error) {
 		"log-file":           true,
 		"verbose":            true,
 		"connection-timeout": true,
+		"mqtt-keepalive":     true,
 	}
 
 	// Check for unknown keys

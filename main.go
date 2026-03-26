@@ -115,7 +115,8 @@ func printSampleConfig() {
     "server": ":22",  // absence of this line implies client mode
     "log-file": "",
     "verbose": false,
-    "connection-timeout": 15
+    "connection-timeout": 15,
+    "mqtt-keepalive": 60
 }
 
 Required fields:
@@ -123,7 +124,10 @@ Required fields:
   - topic:  Control topic (generate with: mqtt-tunnel -topic generate)
 
 Defaults:
-  - MQTT keepalive/ping interval: 60 seconds`)
+  - connection-timeout: 15 seconds (tunnel establishment timeout)
+  - mqtt-keepalive: 60 seconds (MQTT ping interval)
+  
+Note: If SSH keepalive is configured shorter than mqtt-keepalive, SSH will detect disconnects first.`)
 }
 
 func main() {
@@ -144,6 +148,7 @@ func main() {
 		topic             = flag.String("topic", "", "control topic value (use 'generate' to create a secure random topic)")
 		server            = flag.String("server", "", "Enables server mode. The address (usually 127.0.0.1:22) is the address of the target service (most probably SSH) as viewed by the server mqtt-tunnel process. Absence of this option implies client mode.")
 		connectionTimeout = flag.Int("connection-timeout", 15, "connection timeout in seconds")
+		mqttKeepalive     = flag.Int("mqtt-keepalive", 0, "MQTT keepalive interval in seconds (default: 60)")
 	)
 
 	flag.Usage = printUsage
@@ -241,6 +246,11 @@ func main() {
 
 	// Set connection timeout from command line
 	conf.ConnectionTimeout = *connectionTimeout
+
+	// Set MQTT keepalive from command line (0 means use config file value or default)
+	if *mqttKeepalive > 0 {
+		conf.MqttKeepalive = *mqttKeepalive
+	}
 
 	// Determine mode: server mode if ServerAddr is set, otherwise client mode
 	isServerMode := conf.ServerAddr != ""

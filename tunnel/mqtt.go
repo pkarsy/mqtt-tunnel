@@ -502,7 +502,12 @@ func getMQTTOptions(conf Config, clientID string) (*mqtt.ClientOptions, error) {
 	opts.SetCleanSession(true)
 	opts.SetAutoReconnect(true) // Enable to avoid Paho bug, but we exit on disconnect in local mode
 	opts.SetConnectRetryInterval(20 * time.Second)
-	opts.SetKeepAlive(60 * time.Second) // MQTT ping interval - 60 seconds to reduce traffic
+	// MQTT keepalive interval
+	keepalive := time.Duration(conf.MqttKeepalive) * time.Second
+	if keepalive == 0 {
+		keepalive = 60 * time.Second
+	}
+	opts.SetKeepAlive(keepalive)
 
 	return opts, nil
 }
