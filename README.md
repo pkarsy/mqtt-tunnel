@@ -8,7 +8,7 @@ SSH proxy via MQTT
 - **Zero-config** with free public MQTT brokers (Mosquitto, HiveMQ). Maintaining login credentials is a mental burden and a point of failure.
 - Perfect for occasional maintenance connections and light work, one off commands
 - Useful for android/termux
-  > ssh termux-mqtt 'termux-notification -c "Remember the Milk" ; echo Notification sent'
+  `ssh termux-mqtt 'termux-notification -c "Remember the Milk" ; echo Notification sent'`
   
   works the same in home, work wifi or mobile data
 - Useful as a second/backup login method for the excellent [gonc](https://github.com/threatexpert/gonc) tool. mqtt-tunnel has faster initial connections, but it is not a gonc replacement (gonc offers direct connections and by implementing encryption, can be used on more tasks other than SSH tunneling).
