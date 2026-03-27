@@ -4,7 +4,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 BUILD_DIR="${SCRIPT_DIR}/build"
 
-VERSION="0.5.1"
+VERSION="0.6.0"
 
 show_usage() {
     cat << EOF

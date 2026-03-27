@@ -1,7 +1,5 @@
 # mqtt-tunnel
 
-Under construction, do not download yet
-
 SSH proxy via MQTT
 
 - **No port forwarding** required
@@ -16,7 +14,7 @@ SSH proxy via MQTT
 - mqtt-tunnel data always go via the broker, so the lag is usually noticeable, but perfectly usable.
 - The mqtt broker cannot be rate limited.
 - It is not a network anonymizer. Use VPN for this purpose.
-- The data are encapsulated inside mqtt messages, so there is significant data overhead given that the interactive SSH sessions use very small packets. This may be a concern on metered networks.
+- The data are encapsulated inside mqtt messages, so there is significant data overhead, given that the interactive SSH sessions use very small packets. This may be a concern on metered networks.
 
 ### How It Works
 ![connection](connection.png)
@@ -34,7 +32,10 @@ SSH proxy via MQTT
 12. Bidirectional data transfer begins
 
 ### Installation
-Binaries are provided in [releases page](https://github.com/yourusername/mqtt-tunnel/releases). The "mqtt-tunnel-arm64" runs on termux/android and is optimized (GOMAXPROCS=1 THREAD=10 DNS=buildin) to avoid being killed by the android system. It is tested with android 15 and 16 and termux(fdroid) without problems.
+
+Warninng ! WAIT FOR THE UPCOMING 0.6.0 Release !
+
+Binaries are provided in [releases page](https://github.com/yourusername/mqtt-tunnel/releases). The termux binary runs on termux/android/arm64 and is optimized (GOMAXPROCS=1, THREADS=10, buildin DNS) to avoid being killed by some android systems. It is tested with android 15 and 16 and termux(fdroid) without problems, but not all phones are the same.
 
 ### 1. Create a Configuration File
 
