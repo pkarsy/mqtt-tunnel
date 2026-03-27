@@ -266,6 +266,81 @@ sudo /usr/sbin/sshd -p 7022 -D
 # SSH-2.0-OpenSSH_8.9p1 Ubuntu-3ubuntu0.10
 ```
 
+### Server Debugging with Direct MQTT Commands
+
+Instead of running the mqtt-tunnel client in Terminal 4, you can manually send control packets using `mosquitto_pub` to test the server's response to various scenarios. This is useful for debugging server-side validation and error handling.
+
+**Setup:**
+```bash
+# Terminal 4 - Subscribe to see server responses
+mosquitto_sub -t "ssh/ctl" -v
+
+# Terminal 5 - Send test commands
+mosquitto_pub -t "ssh/ctl" -m '<json-payload>'
+```
+
+**Valid connect request (should receive connect_ack):**
+```json
+{"type":"connect","tunnel_id":"Ab12","version":3,"origin":"client","local_port":0,"remote_port":0}
+```
+
+**Invalid ID - empty (should receive failure):**
+```json
+{"type":"connect","tunnel_id":"","version":3,"origin":"client","local_port":0,"remote_port":0}
+```
+
+**Invalid ID - too long (7 chars):**
+```json
+{"type":"connect","tunnel_id":"Ab12Xyz","version":3,"origin":"client","local_port":0,"remote_port":0}
+```
+
+**Invalid ID - special characters:**
+```json
+{"type":"connect","tunnel_id":"Ab-12","version":3,"origin":"client","local_port":0,"remote_port":0}
+```
+
+```json
+{"type":"connect","tunnel_id":"Ab_12","version":3,"origin":"client","local_port":0,"remote_port":0}
+```
+
+```json
+{"type":"connect","tunnel_id":"Ab 12","version":3,"origin":"client","local_port":0,"remote_port":0}
+```
+
+**Duplicate ID test** (send this twice, second should fail):
+```json
+{"type":"connect","tunnel_id":"Test12","version":3,"origin":"client","local_port":0,"remote_port":0}
+```
+
+**Protocol version mismatch:**
+```json
+{"type":"connect","tunnel_id":"Ab12","version":2,"origin":"client","local_port":0,"remote_port":0}
+```
+
+**Edge cases - valid IDs:**
+
+Exactly 6 chars:
+```json
+{"type":"connect","tunnel_id":"Ab12Cd","version":3,"origin":"client","local_port":0,"remote_port":0}
+```
+
+Single char:
+```json
+{"type":"connect","tunnel_id":"A","version":3,"origin":"client","local_port":0,"remote_port":0}
+```
+
+Only digits:
+```json
+{"type":"connect","tunnel_id":"1234","version":3,"origin":"client","local_port":0,"remote_port":0}
+```
+
+Only letters:
+```json
+{"type":"connect","tunnel_id":"AbCd","version":3,"origin":"client","local_port":0,"remote_port":0}
+```
+
+**Note:** The server sends failure responses to the control topic (`ssh/ctl`) which you can see in Terminal 4 (the `mosquitto_sub`). Success responses include `connect_ack` messages.
+
 ## Cleanup
 
 To stop all components:
