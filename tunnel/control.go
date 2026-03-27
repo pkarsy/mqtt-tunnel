@@ -16,6 +16,11 @@ const (
 	controlTypeConnectionClosed controlType = "closed"
 )
 
+const (
+	FailureReasonInvalidID   = "invalid tunnel id: must be 1-6 alphanumeric characters"
+	FailureReasonIDInUse     = "tunnel id already in use"
+)
+
 const ProtocolVersion = 3
 
 type controlPacket struct {
@@ -33,7 +38,7 @@ type controlPacket struct {
 	Reason    string `json:"reason,omitempty"`
 }
 
-const randomLetters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+const randomLetters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 
 func randStr(n int) string {
 	b := make([]byte, n)

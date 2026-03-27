@@ -199,6 +199,26 @@ func (mqt *MQTunnel) handleControl(ctx context.Context, ctl controlPacket) error
 		if !mqt.isServerMode { // server only, skip on client
 			return nil
 		}
+		// Validate tunnel ID format (1-6 alphanumeric characters)
+		if err := validateTunnelID(ctl.TunnelID); err != nil {
+			log.Printf("[ERROR] invalid tunnel id: %v", err)
+			failure := createFailure(ctl.TunnelID, FailureReasonInvalidID)
+			buf, _ := json.Marshal(failure)
+			mqt.mqttBroker.publish(ctx, mqt.mqttBroker.controlTopic, 1, false, buf)
+			return nil
+		}
+		// Check if tunnel ID is already in use
+		mqt.mu.Lock()
+		_, inPending := mqt.pendingConfirms[ctl.TunnelID]
+		_, inConnected := mqt.connected[ctl.TunnelID]
+		mqt.mu.Unlock()
+		if inPending || inConnected {
+			log.Printf("[ERROR] tunnel id already in use: %s", ctl.TunnelID)
+			failure := createFailure(ctl.TunnelID, FailureReasonIDInUse)
+			buf, _ := json.Marshal(failure)
+			mqt.mqttBroker.publish(ctx, mqt.mqttBroker.controlTopic, 1, false, buf)
+			return nil
+		}
 		// Check protocol version
 		if ctl.Version != ProtocolVersion {
 			log.Printf("[ERROR] protocol version mismatch: got %d, want %d", ctl.Version, ProtocolVersion)
@@ -292,6 +312,10 @@ func (mqt *MQTunnel) handleControl(ctx context.Context, ctl controlPacket) error
 		if exists {
 			delete(mqt.ackWaiting, ctl.TunnelID)
 			tun.cancel()
+		}
+		// Exit immediately on fatal errors that prevent connection
+		if ctl.Reason == FailureReasonInvalidID || ctl.Reason == FailureReasonIDInUse {
+			os.Exit(1)
 		}
 	case controlTypeConnectionClosed:
 		tun, exists := mqt.connected[ctl.TunnelID]

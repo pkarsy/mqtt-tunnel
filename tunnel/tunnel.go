@@ -7,8 +7,24 @@ import (
 	"log"
 	"net"
 	"strconv"
+	"unicode"
 	//"time"
 )
+
+// validateTunnelID checks if the tunnel ID is valid:
+// - 1-6 characters long
+// - alphanumeric (a-z, A-Z, 0-9)
+func validateTunnelID(id string) error {
+	if len(id) == 0 || len(id) > 6 {
+		return fmt.Errorf("tunnel id must be 1-6 characters")
+	}
+	for _, c := range id {
+		if !unicode.IsLetter(c) && !unicode.IsDigit(c) {
+			return fmt.Errorf("tunnel id must be alphanumeric")
+		}
+	}
+	return nil
+}
 
 type Tunnel struct {
 	ID             string

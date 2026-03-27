@@ -16,6 +16,7 @@ SSH proxy via MQTT
 - mqtt-tunnel data always go via the broker, so the lag is usually noticeable, but perfectly usable.
 - The mqtt broker cannot be rate limited.
 - It is not a network anonymizer. Use VPN for this purpose.
+- The data are encapsulated inside mqtt messages, so there is significant data overhead given that the interactive SSH sessions use very small packets. This may be a concern on metered networks.
 
 ### How It Works
 ![connection](connection.png)

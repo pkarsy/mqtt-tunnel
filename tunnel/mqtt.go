@@ -339,15 +339,6 @@ func (mqb *mqttBroker) controlPacketReceived(msg mqtt.Message) error {
 				return nil
 			}
 		}
-		// Validate connect request tunnel_id is not already in use
-		if control.Type == controlTypeConnectRequest {
-			_, connectedExists := (*mqb.connected)[control.TunnelID]
-			_, pendingExists := (*mqb.pendingConfirms)[control.TunnelID]
-			if connectedExists || pendingExists {
-				debugf("tunnel_id already in use=%s, dropping", control.TunnelID)
-				return nil
-			}
-		}
 		// Validate connection_closed is for a known tunnel
 		if control.Type == controlTypeConnectionClosed {
 			_, connectedExists := (*mqb.connected)[control.TunnelID]
