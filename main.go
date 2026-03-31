@@ -196,8 +196,8 @@ func main() {
 		os.Exit(0)
 	}
 
-	// Show help if no options are provided
-	if flag.NFlag() == 0 {
+	// Show help if no options are provided AND no default config exists
+	if flag.NFlag() == 0 && effectiveConfigFile == "" {
 		printUsage()
 		os.Exit(0)
 	}
