@@ -8,9 +8,20 @@ import (
 	"io"
 	"log"
 	"os"
+	"path/filepath"
 
 	"mqtt-tunnel/tunnel"
 )
+
+// getDefaultConfigPath returns the default config file path (~/.config/mqtt-tunnel/config.json)
+// Returns empty string if home directory cannot be determined
+func getDefaultConfigPath() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(home, ".config", "mqtt-tunnel", "config.json")
+}
 
 // crlfWriter wraps an io.Writer and converts \n to \r\n for terminal raw mode
 type crlfWriter struct {
@@ -162,6 +173,17 @@ func main() {
 	if effectiveConfigFile == "" {
 		effectiveConfigFile = *configFile
 	}
+
+	// If no config file specified, try the default config file
+	if effectiveConfigFile == "" {
+		defaultConfig := getDefaultConfigPath()
+		if defaultConfig != "" {
+			if _, err := os.Stat(defaultConfig); err == nil {
+				effectiveConfigFile = defaultConfig
+			}
+		}
+	}
+
 	if effectiveConfigFile == "help" {
 		printSampleConfig()
 		os.Exit(0)
