@@ -7,6 +7,7 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"strings"
@@ -96,7 +97,7 @@ type mqttBroker struct {
 const mqttCommandsTimeout = 30 * time.Second
 const topicQoS = 0
 
-func NewMQTTBroker(conf Config, controlCh chan controlPacket, isServerMode bool) (*mqttBroker, error) {
+func NewMQTTBroker(conf Config, controlCh chan controlPacket, isServerMode bool, logOutput io.Writer) (*mqttBroker, error) {
 	// Generate ClientID
 	clientID := GenerateRandomID(6)
 
@@ -129,8 +130,12 @@ func NewMQTTBroker(conf Config, controlCh chan controlPacket, isServerMode bool)
 	opts.SetReconnectingHandler(ret.onReconnect)
 
 	// Set up MQTT logging to use standard log package
-	mqtt.ERROR = log.New(os.Stderr, "[MQTT-ERROR] ", log.Ldate|log.Ltime)
-	mqtt.CRITICAL = log.New(os.Stderr, "[MQTT-CRITICAL] ", log.Ldate|log.Ltime)
+	// Use the provided logOutput to respect -log-file setting
+	if logOutput == nil {
+		logOutput = os.Stderr
+	}
+	mqtt.ERROR = log.New(logOutput, "[MQTT-ERROR] ", log.Ldate|log.Ltime)
+	mqtt.CRITICAL = log.New(logOutput, "[MQTT-CRITICAL] ", log.Ldate|log.Ltime)
 
 	// connect to MQTT Broker
 	client := mqtt.NewClient(opts)

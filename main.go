@@ -34,7 +34,7 @@ func (cw *crlfWriter) Write(p []byte) (n int, err error) {
 	return cw.w.Write(modified)
 }
 
-func setupLog(verbose bool, logFile string, isLocal bool) {
+func setupLog(verbose bool, logFile string, isLocal bool) io.Writer {
 	flags := log.Ldate | log.Ltime
 	prefix := ""
 
@@ -65,6 +65,8 @@ func setupLog(verbose bool, logFile string, isLocal bool) {
 	log.SetFlags(flags)
 	log.SetPrefix(prefix)
 	tunnel.SetVerboseLogging(verbose)
+
+	return output
 }
 
 // expandServerAddr expands a server address shorthand.
@@ -265,7 +267,7 @@ func main() {
 	effectiveVerbose := *verbose || conf.Verbose
 
 	// Setup logging (client mode needs CRLF conversion)
-	setupLog(effectiveVerbose, effectiveLogFile, !isServerMode)
+	logOutput := setupLog(effectiveVerbose, effectiveLogFile, !isServerMode)
 
 	// Log the mode of operation
 	if isServerMode {
@@ -287,7 +289,7 @@ func main() {
 		log.Printf("[INFO]   root-topic=%s", conf.Topic)
 	}
 
-	mqt, err := tunnel.NewMQTunnel(conf, isServerMode)
+	mqt, err := tunnel.NewMQTunnel(conf, isServerMode, logOutput)
 	if err != nil {
 		log.Fatal(err)
 	}

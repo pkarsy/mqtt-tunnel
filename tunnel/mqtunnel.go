@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"os"
@@ -33,7 +34,7 @@ type MQTunnel struct {
 	mu sync.Mutex
 }
 
-func NewMQTunnel(conf Config, isServerMode bool) (*MQTunnel, error) {
+func NewMQTunnel(conf Config, isServerMode bool, logOutput io.Writer) (*MQTunnel, error) {
 	ret := MQTunnel{
 		conf: conf,
 
@@ -46,7 +47,7 @@ func NewMQTunnel(conf Config, isServerMode bool) (*MQTunnel, error) {
 		isServerMode:    isServerMode,
 	}
 
-	mqBroker, err := NewMQTTBroker(conf, ret.controlCh, isServerMode)
+	mqBroker, err := NewMQTTBroker(conf, ret.controlCh, isServerMode, logOutput)
 	if err != nil {
 		return nil, fmt.Errorf("MQTT connection error, %w", err)
 	}
