@@ -57,6 +57,7 @@ and `server.json` on the remote SSH server:
     "topic": "gFAftaCLyD", # the same as client.json
     "server": ":22" # or ":8022" for termux
 }
+
 ```
 
 #### **Topic Best Practices:**
@@ -91,9 +92,14 @@ These services are provided for the common good. **Please use responsibly**. Avo
 
 ### 2. Start the Server
 
+**Important**
+
+**We can omit -c option if the config is in ~/.config/mqtt-tunnel/config.json**
+
 On the server (the one you want to SSH into):
 
 ```bash
+# you can ommit "-c" if using ~/.config/mqtt-tunnel/config.json
 mqtt-tunnel -c server.json
 ```
 
@@ -122,22 +128,12 @@ mqtt-tunnel -c client.json
 
 You should see the SSH server banner (e.g., `SSH-2.0-OpenSSH_8.9`). If you see errors like "protocol version mismatch", you may need to upgrade the server. Once verified working, proceed with SSH configuration below.
 
-To always see mqtt-tunnel progress messages when using SSH, add `"log-file": "/dev/tty"` to your `client.json` (Linux/macOS):
-
-```json
-{
-    "broker": "mqtt://broker.hivemq.com:1883",
-    "topic": "YOUR_TOPIC",
-    "log-file": "/dev/tty"
-}
-```
-
 Add to your `~/.ssh/config`:
 
 ```
 Host remote-via-mqtt
     HostName remote-server
-    ProxyCommand /path/to/mqtt-tunnel -c /path/to/client.json
+    ProxyCommand /path/to/mqtt-tunnel -c /path/to/client.json # or use the default config path
     # you can add `-log-file /dev/tty` to view the progress when running the ssh command
 ```
 
@@ -173,8 +169,6 @@ Then restart sshd
 
 ### Termux (Android SSH Server) Setup
 
-**mqtt-tunnel is especially useful with Termux** - access your phone/termux from anywhere regardless of network changes (WiFi → mobile data, different WiFi networks, etc.).
-
 **Configure sshd keepalive in Termux:**
 
 ```bash
@@ -202,15 +196,19 @@ fi
 # On phone (Termux):
 # Install: pkg install openssh termux-api
 # Generate topic: mqtt-tunnel -topic generate
-mqtt-tunnel -broker mqtt://broker.hivemq.com:1883 -topic YOUR_TOPIC -server :8022
+/path/to/mqtt-tunnel -broker mqtt://broker.hivemq.com:1883 -topic YOUR_TOPIC -server :8022
 
 # On laptop (~/.ssh/config):
 Host termux-phone
     HostName termux
     ServerAliveInterval 10
     ServerAliveCountMax 3
-    ProxyCommand -c /path/to/client.json
-    # or ProxyCommand /path/to/mqtt-tunnel -broker mqtt://broker.hivemq.com:1883 -topic YOUR_TOPIC
+    ProxyCommand  /path/to/mqtt-tunnel -c /path/to/client.json
+    # or
+    ProxyCommand  /path/to/mqtt-tunnel
+    # if we use the default "~/.config/mqtt-tunnel/config.json" config
+    # or without config
+    ProxyCommand /path/to/mqtt-tunnel -broker mqtt://broker.hivemq.com:1883 -topic YOUR_TOPIC
 ```
 
 ### 4. Test the Connection
@@ -229,6 +227,14 @@ Generate a sample config:
 
 ```bash
 mqtt-tunnel -config help
+```
+
+The config understands **$HOME/to/file** and "~/to/file" expansions for example
+```json
+{
+    ...
+    "log-file": "~/log/mqtt-tunnel.log"
+}
 ```
 
 ## Command-Line Options
