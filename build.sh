@@ -4,7 +4,10 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 BUILD_DIR="${SCRIPT_DIR}/build"
 
-VERSION="0.6.0"
+# Extract version from version.go
+get_app_version() {
+    grep 'const Version = ' "${SCRIPT_DIR}/version.go" | sed 's/.*"\(.*\)".*/\1/'
+}
 
 show_usage() {
     cat << EOF
@@ -135,7 +138,7 @@ build_darwin() {
 }
 
 build_all() {
-    echo "Building mqtt-tunnel v$VERSION"
+    echo "Building mqtt-tunnel v$(get_app_version)"
     echo "================================"
     echo ""
 

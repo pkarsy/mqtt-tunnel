@@ -172,12 +172,12 @@ func (mqt *MQTunnel) StartRemote(ctx context.Context) error {
 			mqt.mu.Unlock()
 
 			// Attempt to reconnect to MQTT broker
-			log.Println("[INFO] attempting to reconnect to MQTT broker")
+			//debugf("attempting to reconnect to MQTT broker")
 			if err := mqt.mqttBroker.Reconnect(ctx); err != nil {
-				log.Printf("[ERROR] failed to reconnect to MQTT broker error=%v", err)
+				//log.Printf("[ERROR] failed to reconnect to MQTT broker error=%v", err)
 				return fmt.Errorf("failed to reconnect: %w", err)
 			}
-			log.Println("[INFO] successfully reconnected to MQTT broker")
+			//debugf("successfully reconnected to MQTT broker")
 
 		case tunnelID := <-mqt.mqttBroker.tunnelClosedCh:
 			// Tunnel closed (server's TCP to SSH dropped) - cleanup connected map

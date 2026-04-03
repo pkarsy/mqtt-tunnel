@@ -45,8 +45,11 @@ func (cw *crlfWriter) Write(p []byte) (n int, err error) {
 	return cw.w.Write(modified)
 }
 
-func setupLog(verbose bool, logFile string, isLocal bool) io.Writer {
+func setupLog(verbose bool, logFile string, isLocal bool, printLines bool) io.Writer {
 	flags := log.Ldate | log.Ltime
+	if printLines {
+		flags |= log.Lshortfile
+	}
 	prefix := ""
 
 	var output io.Writer
@@ -128,6 +131,7 @@ func printSampleConfig() {
     "server": ":22",  // absence of this line implies client mode
     "log-file": "",
     "verbose": false,
+    "print-lines": false,
     "connection-timeout": 15,
     "mqtt-keepalive": 60
 }
@@ -151,6 +155,7 @@ func main() {
 		configFile        = flag.String("c", "", "alias for -config")
 		configFileFull    = flag.String("config", "", "config file path (use it to hide secrets from command line; use -config help to print a sample config)")
 		verbose           = flag.Bool("verbose", false, "verbose logging")
+		printLines        = flag.Bool("print-lines", false, "include file and line number in log messages")
 		logFile           = flag.String("log-file", "", "log file path")
 		broker            = flag.String("broker", "", "MQTT broker URL (e.g., mqtt://host:port, mqtts://host:port, ws://host:port, wss://host:port). Default ports: mqtt=1883, mqtts=8883, ws=80, wss=443)")
 		username          = flag.String("username", "", "MQTT username value")
@@ -288,8 +293,11 @@ func main() {
 	// Use verbose from config if not provided on command line
 	effectiveVerbose := *verbose || conf.Verbose
 
+	// Use print-lines from config if not provided on command line
+	effectivePrintLines := *printLines || conf.PrintLines
+
 	// Setup logging (client mode needs CRLF conversion)
-	logOutput := setupLog(effectiveVerbose, effectiveLogFile, !isServerMode)
+	logOutput := setupLog(effectiveVerbose, effectiveLogFile, !isServerMode, effectivePrintLines)
 
 	// Log the mode of operation
 	if isServerMode {

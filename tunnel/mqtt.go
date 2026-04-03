@@ -225,7 +225,7 @@ func (mqb *mqttBroker) connectWithRetry(ctx context.Context) error {
 
 		err := mqb.connect()
 		if err == nil {
-			log.Printf("[INFO] successfully connected to MQTT broker, client_id=%s", mqb.clientID)
+			log.Printf("[INFO] successfully connected, client_id=%s", mqb.clientID)
 			return nil
 		}
 
@@ -403,7 +403,7 @@ func (mqb *mqttBroker) onConnect(client mqtt.Client) {
 }
 
 func (mqb *mqttBroker) onReconnect(client mqtt.Client, opts *mqtt.ClientOptions) {
-	log.Println("[INFO] reconnecting...")
+	debugf("reconnecting...")
 }
 
 func (mqb *mqttBroker) onMqttConnectionLost(client mqtt.Client, err error) {
@@ -421,7 +421,7 @@ func (mqb *mqttBroker) onMqttConnectionLost(client mqtt.Client, err error) {
 
 	// Server mode: signal that reconnection is needed
 	// The StartRemote loop will handle closing tunnels and reconnecting
-	log.Println("[WARN] server mode: signalling reconnection needed")
+	debugf("server mode: signalling reconnection needed")
 	select {
 	case mqb.reconnectCh <- true:
 	default:

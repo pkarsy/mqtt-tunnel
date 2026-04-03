@@ -40,6 +40,7 @@ type Config struct {
 	ServerAddr string `json:"server"`
 	LogFile    string `json:"log-file"`
 	Verbose    bool   `json:"verbose"`
+	PrintLines bool   `json:"print-lines"`
 
 	// ConnectionTimeout is the maximum time to wait for tunnel establishment (in seconds)
 	// Default: 15 seconds
@@ -76,6 +77,7 @@ func ReadConfig(filePath string) (Config, error) {
 		"server":             true,
 		"log-file":           true,
 		"verbose":            true,
+		"print-lines":        true,
 		"connection-timeout": true,
 		"mqtt-keepalive":     true,
 	}
