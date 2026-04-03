@@ -92,7 +92,33 @@ func ReadConfig(filePath string) (Config, error) {
 	if err := json.Unmarshal(buf, &ret); err != nil {
 		return ret, fmt.Errorf("read config marshal error: %w", err)
 	}
+
+	// Expand ~ and environment variables in path fields
+	ret.CaCert = expandPath(ret.CaCert)
+	ret.ClientCert = expandPath(ret.ClientCert)
+	ret.PrivateKey = expandPath(ret.PrivateKey)
+	ret.LogFile = expandPath(ret.LogFile)
+
 	return ret, nil
+}
+
+// expandPath expands ~ and environment variables in a path.
+// ~ at the start is expanded to the user's home directory.
+// $HOME and other environment variables are expanded.
+func expandPath(path string) string {
+	if path == "" {
+		return ""
+	}
+	// Expand ~ to $HOME
+	if strings.HasPrefix(path, "~") {
+		home, _ := os.UserHomeDir()
+		if home != "" {
+			path = home + path[1:]
+		}
+	}
+	// Expand $HOME and other environment variables
+	path = os.ExpandEnv(path)
+	return path
 }
 
 // BrokerInfo contains parsed information from the broker URL

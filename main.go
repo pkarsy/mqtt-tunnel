@@ -144,7 +144,11 @@ Defaults:
   - connection-timeout: 15 seconds (tunnel establishment timeout)
   - mqtt-keepalive: 60 seconds (MQTT ping interval)
   
-Note: If SSH keepalive is configured shorter than mqtt-keepalive, SSH will detect disconnects first.`)
+Note: If SSH keepalive is configured shorter than mqtt-keepalive, SSH will detect disconnects first.
+
+Path expansion:
+  Path fields (ca-cert, client-cert, private-key, log-file) support ~ and $HOME expansion.
+  Example: "log-file": "~/.config/mqtt-tunnel/mqtt-tunnel.log"`)
 }
 
 func main() {
