@@ -107,7 +107,7 @@ build_termux() {
 
     CGO_ENABLED=0 GOOS=linux GOARCH=arm64 \
         go build -ldflags="$ldflags" -trimpath \
-        -tags=termux \
+        -tags=termux,tzdata \
         -o "$output_path" \
         "${SCRIPT_DIR}" 2>/dev/null
 

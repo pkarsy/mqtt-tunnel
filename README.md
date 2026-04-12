@@ -272,6 +272,26 @@ mqtt-tunnel -c server.json -log-file ~/mqtt-tunnel.log -verbose
 **Note:** Every Android device behaves differently. You may need to experiment
 to find the right balance for your specific device.
 
+**Timezone / Local Time in Logs:**
+
+The Termux binary is statically linked and includes an embedded timezone database.
+To display local time in logs (instead of UTC), set the `TZ` environment variable:
+
+```bash
+# Find your timezone
+getprop persist.sys.timezone
+
+# Run with TZ set
+TZ=Europe/Athens mqtt-tunnel -c config.json
+
+# Or make it permanent
+export TZ=Europe/Athens
+echo 'export TZ=Europe/Athens' >> ~/.bashrc
+```
+
+Common timezone values: `Europe/Athens`, `Europe/London`, `America/New_York`, `Asia/Tokyo`,
+or use `EET`, `CET`, `EST` for short forms.
+
 ### 4. Test the Connection
 
 To verify the tunnel works without using SSH:

@@ -8,6 +8,8 @@ import (
     "runtime"
     "runtime/debug"
     "time"
+
+    _ "time/tzdata" // Embed timezone database for CGO-disabled builds
 )
 
 func initPlatform() {
