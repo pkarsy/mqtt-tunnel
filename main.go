@@ -9,18 +9,64 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"mqtt-tunnel/tunnel"
 )
 
-// getDefaultConfigPath returns the default config file path (~/.config/mqtt-tunnel/config.json)
-// Returns empty string if home directory cannot be determined
+// fileExists checks if a file exists
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
+}
+
+// getDefaultConfigPath returns the default config file path.
+// Looks for default.json first, then config.json for backward compatibility.
+// Returns empty string if home directory cannot be determined or no config found.
 func getDefaultConfigPath() string {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return ""
 	}
-	return filepath.Join(home, ".config", "mqtt-tunnel", "config.json")
+
+	configDir := filepath.Join(home, ".config", "mqtt-tunnel")
+
+	// Try default.json first
+	defaultPath := filepath.Join(configDir, "default.json")
+	if fileExists(defaultPath) {
+		return defaultPath
+	}
+
+	// Fall back to config.json for backward compatibility
+	configPath := filepath.Join(configDir, "config.json")
+	if fileExists(configPath) {
+		return configPath
+	}
+
+	return ""
+}
+
+// resolveConfigPath resolves a config file path.
+// If the path contains no directory separator, it first checks in
+// ~/.config/mqtt-tunnel/, then falls back to current directory.
+// Returns the resolved path.
+func resolveConfigPath(filename string) string {
+	// If path contains / or \ (Windows), use as-is
+	if strings.ContainsAny(filename, "/\\") {
+		return filename
+	}
+
+	// Try ~/.config/mqtt-tunnel/ first
+	home, err := os.UserHomeDir()
+	if err == nil {
+		configDirPath := filepath.Join(home, ".config", "mqtt-tunnel", filename)
+		if fileExists(configDirPath) {
+			return configDirPath
+		}
+	}
+
+	// Fall back to current directory
+	return filename
 }
 
 // crlfWriter wraps an io.Writer and converts \n to \r\n for terminal raw mode
@@ -185,12 +231,10 @@ func main() {
 
 	// If no config file specified, try the default config file
 	if effectiveConfigFile == "" {
-		defaultConfig := getDefaultConfigPath()
-		if defaultConfig != "" {
-			if _, err := os.Stat(defaultConfig); err == nil {
-				effectiveConfigFile = defaultConfig
-			}
-		}
+		effectiveConfigFile = getDefaultConfigPath()
+	} else {
+		// Resolve config file path (handles bare filenames)
+		effectiveConfigFile = resolveConfigPath(effectiveConfigFile)
 	}
 
 	if effectiveConfigFile == "help" {
@@ -219,7 +263,16 @@ func main() {
 	if effectiveConfigFile != "" {
 		conf, err = tunnel.ReadConfig(effectiveConfigFile)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			// Provide helpful error message for bare filenames
+			if !strings.ContainsAny(effectiveConfigFile, "/\\") {
+				home, _ := os.UserHomeDir()
+				fmt.Fprintf(os.Stderr, "Error: config file not found: %s\n", effectiveConfigFile)
+				fmt.Fprintf(os.Stderr, "Looked in:\n")
+				fmt.Fprintf(os.Stderr, "  - %s\n", filepath.Join(home, ".config", "mqtt-tunnel", effectiveConfigFile))
+				fmt.Fprintf(os.Stderr, "  - ./%s\n", effectiveConfigFile)
+			} else {
+				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			}
 			os.Exit(1)
 		}
 	}

@@ -5,7 +5,7 @@ SSH proxy via MQTT
 - **No port forwarding** required
 - **No open ports in server firewall**
 - **Works with any NAT** configuration. Even with difficult scenarios where hole punching cannot work like double NAT, Symmetric NAT
-- **Zero-config** with free public MQTT brokers (Mosquitto, HiveMQ). Maintaining login credentials is a mental burden and a point of failure.
+- **Zero-config** when using free public MQTT brokers (Mosquitto, HiveMQ). Maintaining login credentials is a mental burden and a point of failure.
 - Perfect for occasional maintenance connections and light work, one off commands
 - Useful for android/termux
   ``` bash
@@ -37,11 +37,39 @@ All negotiation is performed in the control topic (e.g., baseTopic/ctl) but the 
 
 ### Installation
 
-Warninng ! WAIT FOR THE UPCOMING 0.6.0 Release !
-
 Binaries are provided in [releases page](https://github.com/yourusername/mqtt-tunnel/releases). The termux binary runs on termux/android/arm64 and is optimized (GOMAXPROCS=1, THREADS=10, buildin DNS) to avoid being killed by some android systems. It is tested with android 15 and 16 and termux(fdroid) without problems, but not all phones are the same.
 
 ### 1. Create a Configuration File
+
+#### Config File Location
+
+Config files can be specified in several ways:
+
+**1. Default config (no `-c` flag):**
+The program looks for config files in `~/.config/mqtt-tunnel/`:
+- First: `default.json` (preferred)
+- Second: `config.json` (backward compatibility)
+
+**2. Explicit config with `-c`:**
+```bash
+mqtt-tunnel -c server.json
+```
+
+When using a filename without path separators (e.g., `server.json`), the program:
+1. First looks in `~/.config/mqtt-tunnel/server.json`
+2. If not found, looks in current directory `./server.json`
+
+This allows terse commands while keeping configs organized in the standard location.
+
+To force current directory, use `./server.json` or a full path.
+
+**3. Full path:**
+```bash
+mqtt-tunnel -c /path/to/config.json
+mqtt-tunnel -c ./config.json          # Force current directory
+```
+
+#### Example Config Files
 
 Create `client.json` on your PC:
 
@@ -94,15 +122,14 @@ These services are provided for the common good. **Please use responsibly**. Avo
 
 ### 2. Start the Server
 
-**Important**
-
-**We can omit -c option if the config is in ~/.config/mqtt-tunnel/config.json**
-
 On the server (the one you want to SSH into):
 
 ```bash
-# you can ommit "-c" if using ~/.config/mqtt-tunnel/config.json
+# Using terse syntax - looks in ~/.config/mqtt-tunnel/ first, then current directory
 mqtt-tunnel -c server.json
+
+# Or place config in ~/.config/mqtt-tunnel/default.json and omit -c entirely
+mqtt-tunnel
 ```
 
 Or without a config file:
@@ -125,7 +152,11 @@ mqtt-tunnel -broker mqtt://broker.hivemq.com:1883 -topic gFAftaCLyD -server :22
 **Important:** Before configuring SSH, first test the tunnel standalone to verify it connects successfully:
 
 ```bash
+# With terse syntax (looks in ~/.config/mqtt-tunnel/ first)
 mqtt-tunnel -c client.json
+
+# Or with default config location (no -c needed)
+mqtt-tunnel
 ```
 
 You should see the SSH server banner (e.g., `SSH-2.0-OpenSSH_8.9`). If you see errors like "protocol version mismatch", you may need to upgrade the server. Once verified working, proceed with SSH configuration below.
@@ -135,7 +166,10 @@ Add to your `~/.ssh/config`:
 ```
 Host remote-via-mqtt
     HostName remote-server
-    ProxyCommand /path/to/mqtt-tunnel -c /path/to/client.json # or use the default config path
+    # Using terse syntax - config file in ~/.config/mqtt-tunnel/client.json
+    ProxyCommand /path/to/mqtt-tunnel -c client.json
+    # Or with default config (default.json or config.json in ~/.config/mqtt-tunnel/)
+    # ProxyCommand /path/to/mqtt-tunnel
     # you can add `-log-file /dev/tty` to view the progress when running the ssh command
 ```
 
@@ -198,19 +232,20 @@ fi
 # On phone (Termux):
 # Install: pkg install openssh termux-api
 # Generate topic: mqtt-tunnel -topic generate
-/path/to/mqtt-tunnel -broker mqtt://broker.hivemq.com:1883 -topic YOUR_TOPIC -server :8022
+# Place config in ~/.config/mqtt-tunnel/server.json and run:
+/path/to/mqtt-tunnel
 
 # On laptop (~/.ssh/config):
 Host termux-phone
     HostName termux
     ServerAliveInterval 10
     ServerAliveCountMax 3
-    ProxyCommand  /path/to/mqtt-tunnel -c /path/to/client.json
-    # or
-    ProxyCommand  /path/to/mqtt-tunnel
-    # if we use the default "~/.config/mqtt-tunnel/config.json" config
-    # or without config
-    ProxyCommand /path/to/mqtt-tunnel -broker mqtt://broker.hivemq.com:1883 -topic YOUR_TOPIC
+    # Using terse syntax - config in ~/.config/mqtt-tunnel/client.json
+    ProxyCommand /path/to/mqtt-tunnel -c client.json
+    # Or with default config location (default.json or config.json)
+    # ProxyCommand /path/to/mqtt-tunnel
+    # Or without config file
+    # ProxyCommand /path/to/mqtt-tunnel -broker mqtt://broker.hivemq.com:1883 -topic YOUR_TOPIC
 ```
 
 ### Battery Optimization vs Connection Stability (Server Mode)
@@ -259,7 +294,7 @@ mqtt-tunnel -c server.json -log-file ~/mqtt-tunnel.log -verbose
        "mqtt-keepalive": 15
    }
    ```
-   Shorter keepalive (15-20s) may prevent Doze from kicking in.
+   Shorter keepalive (15-20s) **may** prevent Doze from kicking in.
    Experiment with values: 10, 15, 20, 30 seconds.
 
 3. **Disable battery optimization for Termux** (system setting)
