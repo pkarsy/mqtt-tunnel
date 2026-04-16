@@ -64,8 +64,10 @@ func NewConfigReloader(configPath string, debounce time.Duration, onReload func(
 		cancel:       cancel,
 	}
 
-	// Watch the real config file (not the symlink)
-	if err := watcher.Add(realPath); err != nil {
+	// Watch the parent directory, not the file itself
+	// This handles file replacement (sed -i) which creates a new inode
+	configDir := filepath.Dir(realPath)
+	if err := watcher.Add(configDir); err != nil {
 		watcher.Close()
 		cancel()
 		return nil, err
@@ -92,13 +94,24 @@ func (cr *ConfigReloader) Stop() {
 }
 
 func (cr *ConfigReloader) watch() {
+	configDir := filepath.Dir(cr.configPath)
+	configFile := filepath.Base(cr.configPath)
+	debugf("config reloader watching directory: %s for file: %s", configDir, configFile)
 	for {
 		select {
 		case event, ok := <-cr.watcher.Events:
 			if !ok {
+				debugf("config reloader watcher events channel closed")
 				return
 			}
-			// Only react to write or create events (create is needed for some editors that rename then create)
+			debugf("config reloader event: %s (op: %s)", event.Name, event.Op.String())
+			
+			// Filter for our specific config file
+			if filepath.Base(event.Name) != configFile {
+				continue
+			}
+			
+			// Handle Write (normal save) and Create (sed -i replacement)
 			if event.Op&(fsnotify.Write|fsnotify.Create) != 0 {
 				if cr.originalPath != cr.configPath {
 					log.Printf("[INFO] Config file change detected: %s (symlink to %s)", cr.originalPath, cr.configPath)
@@ -110,11 +123,13 @@ func (cr *ConfigReloader) watch() {
 
 		case err, ok := <-cr.watcher.Errors:
 			if !ok {
+				debugf("config reloader watcher errors channel closed")
 				return
 			}
 			log.Printf("[ERROR] Config file watcher error: %v", err)
 
 		case <-cr.ctx.Done():
+			debugf("config reloader context cancelled")
 			return
 		}
 	}
@@ -129,8 +144,11 @@ func (cr *ConfigReloader) resetTimer() {
 		cr.timer.Stop()
 	}
 
+	debugf("config reloader debounce timer started: %v", cr.debounce)
+
 	// Create new timer
 	cr.timer = time.AfterFunc(cr.debounce, func() {
+		debugf("config reloader debounce timer expired, calling onReload")
 		cr.onReload()
 	})
 }

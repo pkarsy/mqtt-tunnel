@@ -148,8 +148,8 @@ setsid -f mqtt-tunnel
 **Auto-start on boot** (add to crontab with `crontab -e`, no root is needed):
 
 ```bash
-# assuming mqtt-tunnel and server.json are under ~/tunnel. The ./server.json means
-# look at current directory, and not under ~/.config/mqtt-tunnel/
+# assuming mqtt-tunnel and server.json are under ~/tunnel. The ./server.json (The ./) causes
+# lookup at current directory, and not under ~/.config/mqtt-tunnel/
 @reboot cd /home/user/tunnel && setsid -f ./mqtt-tunnel -c ./server.json
 # Or if mqtt-tunnel is on PATH and config is in ~/.config/mqtt-tunnel/default.json
 @reboot setsid -f mqtt-tunnel
@@ -231,6 +231,20 @@ Host termux-phone
 ```
 
 **Note:** The Termux build automatically sets `manual-keepalive` to 60 seconds by default to work better with Android's Doze mode. See [README_TERMUX.md](README_TERMUX.md) for details.
+
+### Topic Recycling with replace-topic
+
+The `replace-topic` script helps rotate topics periodically for security:
+
+```bash
+# Generate new random topic and update both local and remote configs
+./replace-topic client.json server@host:
+
+# Or specify a custom topic
+./replace-topic client.json server@host: MyCustomTopic123
+```
+
+The script resolves bare filenames to `~/.config/mqtt-tunnel/` (like mqtt-tunnel itself) and ensures both files have matching topics before updating. See the script source for details.
 
 ### 4. Test the Connection
 

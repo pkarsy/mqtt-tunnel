@@ -1,0 +1,149 @@
+#!/bin/bash
+
+DEFAULT_REMOTE_PATH="\$HOME/.config/mqtt-tunnel/default.json"
+
+# Function to generate random 8-char alphanumeric topic
+generate_topic() {
+    # Use /dev/urandom to generate 8 random alphanumeric characters
+    tr -dc 'a-zA-Z0-9' < /dev/urandom | head -c 8
+}
+
+# Check argument count
+if [ "$#" -lt 2 ] || [ "$#" -gt 3 ]; then
+    echo "Usage: $0 local-file HOST:remote-file [NewTopic]"
+    echo ""
+    echo "  local-file: Can be a bare filename (e.g., 'termux' or 'termux.json') which will be resolved to:"
+    echo "              ~/.config/mqtt-tunnel/termux.json"
+    echo "              Or a full path like ./termux.json or /path/to/file.json"
+    echo ""
+    echo "  remote-file format: [user@]host:/path/to/file"
+    echo "              If path is omitted (just 'host:'), defaults to:"
+    echo "              host:$DEFAULT_REMOTE_PATH"
+    echo "              Bare filenames are resolved to ~/.config/mqtt-tunnel/ on remote"
+    echo ""
+    echo "  NewTopic:   Optional. If omitted, a random 8-char topic is generated."
+    exit 1
+fi
+
+LOCAL_FILE="$1"
+REMOTE_SPEC="$2"
+
+# Generate or use provided topic
+if [ -n "$3" ]; then
+    TOPIC="$3"
+else
+    TOPIC=$(generate_topic)
+    echo "Generated random topic: $TOPIC"
+fi
+
+# Resolve local file path (same logic as mqtt-tunnel binary)
+# If no directory separator, look in ~/.config/mqtt-tunnel/ first
+if [[ "$LOCAL_FILE" != *"/*" ]] && [[ "$LOCAL_FILE" != *".\\"* ]]; then
+    # Try ~/.config/mqtt-tunnel/ first
+    CONFIG_DIR="$HOME/.config/mqtt-tunnel"
+    if [ -f "$CONFIG_DIR/$LOCAL_FILE" ]; then
+        LOCAL_FILE="$CONFIG_DIR/$LOCAL_FILE"
+    elif [ -f "$CONFIG_DIR/${LOCAL_FILE%.json}.json" ]; then
+        # Try adding .json extension if missing
+        LOCAL_FILE="$CONFIG_DIR/${LOCAL_FILE%.json}.json"
+    fi
+    # If not found in config dir, use as-is (current directory)
+fi
+
+# Parse remote specification
+# Check if it contains a colon (scp-style)
+if [[ "$REMOTE_SPEC" != *:* ]]; then
+    echo "Error: Remote specification must be in HOST:path format (like scp)"
+    echo "  Examples: user@host:/path/to/file"
+    echo "            host:/path/to/file"
+    exit 1
+fi
+# Split host and path
+HOST="${REMOTE_SPEC%%:*}"
+REMOTE_FILE="${REMOTE_SPEC#*:}"
+
+# If remote path is empty, use default
+if [ -z "$REMOTE_FILE" ]; then
+    REMOTE_FILE="$DEFAULT_REMOTE_PATH"
+else
+    # Resolve remote file path (same logic as mqtt-tunnel binary)
+    # If no directory separator, use ~/.config/mqtt-tunnel/ on remote
+    if [[ "$REMOTE_FILE" != *"/*" ]] && [[ "$REMOTE_FILE" != *".\\"* ]]; then
+        REMOTE_FILE="\$HOME/.config/mqtt-tunnel/${REMOTE_FILE%.json}.json"
+    fi
+fi
+
+# Check if local file exists
+if [ ! -f "$LOCAL_FILE" ]; then
+    echo "Error: Local file '$LOCAL_FILE' not found"
+    exit 1
+fi
+
+# Check if local file looks like JSON
+if ! head -1 "$LOCAL_FILE" | grep -q '{'; then
+    echo "Error: '$LOCAL_FILE' does not appear to be a JSON file"
+    exit 1
+fi
+
+# Check if remote file exists (via SSH)
+if ! ssh "$HOST" "test -f $REMOTE_FILE"; then
+    echo "Error: Remote file '$REMOTE_FILE' not found on host '$HOST'"
+    exit 1
+fi
+
+# Check if remote file looks like JSON
+if ! ssh "$HOST" "head -1 $REMOTE_FILE | grep -q '{'"; then
+    echo "Error: Remote file '$REMOTE_FILE' does not appear to be JSON on host '$HOST'"
+    exit 1
+fi
+
+# Extract OLD_TOPIC from local file
+LOCAL_OLD_TOPIC=$(grep '"topic"' "$LOCAL_FILE" | head -1 | sed 's/.*"topic": *"//; s/".*//')
+
+if [ -z "$LOCAL_OLD_TOPIC" ]; then
+    echo "Error: Could not extract topic from local file"
+    exit 1
+fi
+
+# Extract OLD_TOPIC from remote file
+REMOTE_OLD_TOPIC=$(ssh "$HOST" "grep '\"topic\"' $REMOTE_FILE" | head -1 | sed 's/.*"topic": *"//; s/".*//')
+
+if [ -z "$REMOTE_OLD_TOPIC" ]; then
+    echo "Error: Could not extract topic from remote file"
+    exit 1
+fi
+
+# Check if topics match
+if [ "$LOCAL_OLD_TOPIC" != "$REMOTE_OLD_TOPIC" ]; then
+    echo "Error: Topics do not match!"
+    echo "  Local topic:  '$LOCAL_OLD_TOPIC'"
+    echo "  Remote topic: '$REMOTE_OLD_TOPIC'"
+    echo "Refusing to proceed."
+    exit 1
+fi
+
+OLD_TOPIC="$LOCAL_OLD_TOPIC"
+
+echo "Found old topic: '$OLD_TOPIC'"
+echo "New topic will be: '$TOPIC'"
+echo "Remote host: '$HOST'"
+echo "Remote file: '$REMOTE_FILE'"
+
+# Replace remote first
+echo "Updating remote file..."
+if ssh "$HOST" "sed -i 's/$OLD_TOPIC/$TOPIC/g' $REMOTE_FILE"; then
+    echo "Remote update successful"
+else
+    echo "Error: Remote update failed"
+    exit 1
+fi
+
+# If remote succeeded, replace local
+echo "Updating local file..."
+if sed -i "s/$OLD_TOPIC/$TOPIC/g" "$LOCAL_FILE"; then
+    echo "Local update successful"
+    echo "Done."
+else
+    echo "Error: Local update failed (remote was already changed!)"
+    exit 1
+fi
