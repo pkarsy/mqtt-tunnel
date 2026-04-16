@@ -76,21 +76,23 @@ mqtt-tunnel -c ./config.json          # Force current directory
 
 #### Example Config Files
 
-Create `client.json` on your PC:
+On your PC:
 
 ```json
 {
     "broker": "mqtt://broker.hivemq.com:1883",
-    "topic": "gFAftaCLyD" # generate a new with "mqtt-tunnel -topic generate"
+    "topic": "gFAftaCL", # generate a new with "mqtt-tunnel -topic generate"
+    "log-file" : "/dev/tty" # You will see the messages on screen, change to a real file later on
 }
 ```
 
-and `server.json` on the remote SSH server:
+On the remote SSH server:
 ```json
 {
-    "broker": "mqtt://broker.hivemq.com:1883", # the same as client.json
-    "topic": "gFAftaCLyD", # the same as client.json
-    "server": ":22" # or ":8022" for termux
+    "broker": "mqtt://broker.hivemq.com:1883", # the same as on client
+    "topic": "gFAftaCL", # the same as on client
+    "log-file": ~/mqtt-tunnel.log, # for debugging change to "/dev/tty" or "tail -f ~/mqtt-tunnel.log"
+    "server": ":22" # or "127.0.0.1:22" or ":8022" for termux, see the dedicated README
 }
 
 ```
@@ -99,7 +101,7 @@ and `server.json` on the remote SSH server:
 The topic does not contribute to the SSH security. However it must remain secret and not guessable.
 
 **For public MQTT brokers with no login credentials:**
-- Use 8-10 random alphanumeric characters (e.g., `gFAftaCLyD`). Run `mqtt-tunnel -topic generate` to get one
+- Use 8-10 random alphanumeric characters (e.g., `gFAftaCL`). Run `mqtt-tunnel -topic generate` to get one
 - Avoid slashes (`/`) - they create topic hierarchies that may be accessible via wildcard subscriptions (`#` or `+`). The individual tunnel topics will be subtopics of this.
 
 **For servers with login credentials (for example flespi.io):**
@@ -133,28 +135,29 @@ On the server (the one you want to SSH into):
 # Using terse syntax - looks in ~/.config/mqtt-tunnel/ first, then current directory
 mqtt-tunnel -c server.json
 
-# Or place config in ~/.config/mqtt-tunnel/default.json and omit -c entirely
+# Or (recommended) place config in ~/.config/mqtt-tunnel/default.json and omit -c entirely
 mqtt-tunnel
+
+# If you are starting it from a script
+setsid -f mqtt-tunnel
 ```
 
-Or without a config file:
-
-```bash
-mqtt-tunnel -broker mqtt://broker.hivemq.com:1883 -topic gFAftaCLyD -server :22
-```
 
 > **Note:** The `-server` flag accepts a shorthand: `:22` is expanded to `127.0.0.1:22`. Use `:8022` for Termux SSH.
 
 **Auto-start on boot** (add to crontab with `crontab -e`, no root is needed):
 
 ```bash
-# assuming mqtt-tunnel and server.json are under ~/tunnel
-@reboot cd /home/user/tunnel && ./mqtt-tunnel -c server.json 2>&1 &
+# assuming mqtt-tunnel and server.json are under ~/tunnel. The ./server.json means
+# look at current directory, and not under ~/.config/mqtt-tunnel/
+@reboot cd /home/user/tunnel && setsid -f ./mqtt-tunnel -c ./server.json
+# Or if mqtt-tunnel is on PATH and config is in ~/.config/mqtt-tunnel/default.json
+@reboot setsid -f mqtt-tunnel
 ```
 
 ### 3. Configure SSH on client machine
 
-**Important:** Before configuring SSH, first test the tunnel standalone to verify it connects successfully:
+**Important:** In client mode mqtt-tunnel is started as a subprocess of ssh client. Before configuring SSH, first test the tunnel standalone to verify it works correctly:
 
 ```bash
 # With terse syntax (looks in ~/.config/mqtt-tunnel/ first)

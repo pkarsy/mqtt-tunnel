@@ -169,7 +169,7 @@ func printUsage() {
 func printSampleConfig() {
 	fmt.Println(`{
     "broker": "mqtt://broker.hivemq.com:1883",
-    "topic": "gFAftaCLyD",
+    "topic": "gFAftaCL",
     "username": "",
     "password": "",
     "ca-cert": "",
@@ -323,6 +323,13 @@ func main() {
 	// Validate topic format
 	if err := tunnel.ValidateTopic(conf.Topic); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: invalid topic: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Check for blacklisted example topics from documentation
+	if conf.Topic == "gFAftaCLyD" || conf.Topic == "gFAftaCL" {
+		fmt.Fprintf(os.Stderr, "Error: topic '%s' is an example from the current or previous README and may be used by other users\n", conf.Topic)
+		fmt.Fprintf(os.Stderr, "Please generate your own unique topic with: mqtt-tunnel -topic generate\n")
 		os.Exit(1)
 	}
 
