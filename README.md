@@ -5,14 +5,17 @@ SSH proxy via MQTT
 - **No port forwarding** required
 - **No open ports in server firewall**
 - **Works with any NAT** configuration. Even with difficult scenarios where hole punching cannot work like double NAT, Symmetric NAT
-- **Zero-config** when using free public MQTT brokers (Mosquitto, HiveMQ). Maintaining login credentials is a mental burden and a point of failure.
+- **Zero-config** with free public MQTT brokers (Mosquitto, HiveMQ). Maintaining login credentials is a mental burden and a point of failure.
 - Perfect for occasional maintenance connections and light work, one off commands
-- Useful for android/termux
+- Potentially useful for android/termux
   ``` bash
-  ssh termux-mqtt 'termux-notification -c "Remember the Milk" ; echo Notification sent'
-  ssh termux-mqtt termux-clipboard-set Password/Url
+  > ssh termux-mqtt 'termux-notification -c "Remember the Milk" ; echo Notification sent'
+  
+  > ssh termux-mqtt termux-clipboard-set password/anything
   ```  
   works the same on home or work, wifi or mobile data.
+  
+  See [README_TERMUX.md](README_TERMUX.md) for detailed Termux setup and Android-specific considerations.
 - Useful as a second/backup login method for the excellent [gonc](https://github.com/threatexpert/gonc) tool. mqtt-tunnel has faster initial connections, but it is not a gonc replacement (gonc offers direct connections and by implementing encryption, can be used on more tasks other than SSH tunneling).
 - mqtt-tunnel data always go via the broker, so the lag is usually noticeable, but perfectly usable.
 - The mqtt broker cannot be rate limited.
@@ -33,11 +36,13 @@ All negotiation is performed in the control topic (e.g., baseTopic/ctl) but the 
 9. Server: receives confirm
 10. Server: connects to SSH target (e.g., 127.0.0.1:22)
 11. Server: starts reading from SSH, publishing data to ServerPubTopic
-12. Clinet publishes to ClientPubTopic, so Bidirectional data transfer begins.
+12. Client publishes to ClientPubTopic, so bidirectional data transfer begins.
 
 ### Installation
 
-Binaries are provided in [releases page](https://github.com/yourusername/mqtt-tunnel/releases). The termux binary runs on termux/android/arm64 and is optimized (GOMAXPROCS=1, THREADS=10, buildin DNS) to avoid being killed by some android systems. It is tested with android 15 and 16 and termux(fdroid) without problems, but not all phones are the same.
+Binaries are provided in [releases page](https://github.com/yourusername/mqtt-tunnel/releases).
+
+**For Termux/Android:** See [README_TERMUX.md](README_TERMUX.md) for Android-specific installation and setup instructions.
 
 ### 1. Create a Configuration File
 
@@ -205,33 +210,12 @@ Then restart sshd
 
 ### Termux (Android SSH Server) Setup
 
-**Configure sshd keepalive in Termux:**
+For detailed Termux setup instructions, Android-specific considerations, and battery optimization tips, see **[README_TERMUX.md](README_TERMUX.md)**.
 
-```bash
-# Edit sshd config
-nano $PREFIX/etc/ssh/sshd_config
-
-# Add these lines:
-ClientAliveInterval 60
-ClientAliveCountMax 3
-
-# Restart sshd
-pkill sshd && sshd
-```
-
-**Auto-start sshd when Termux opens** (add to `~/.bashrc`):
-```bash
-# Start sshd if not running
-if ! pgrep -x "sshd" > /dev/null; then
-    sshd
-fi
-```
-
-**Typical setup:**
+Quick start for Termux:
 ```bash
 # On phone (Termux):
 # Install: pkg install openssh termux-api
-# Generate topic: mqtt-tunnel -topic generate
 # Place config in ~/.config/mqtt-tunnel/server.json and run:
 /path/to/mqtt-tunnel
 
@@ -240,92 +224,10 @@ Host termux-phone
     HostName termux
     ServerAliveInterval 10
     ServerAliveCountMax 3
-    # Using terse syntax - config in ~/.config/mqtt-tunnel/client.json
     ProxyCommand /path/to/mqtt-tunnel -c client.json
-    # Or with default config location (default.json or config.json)
-    # ProxyCommand /path/to/mqtt-tunnel
-    # Or without config file
-    # ProxyCommand /path/to/mqtt-tunnel -broker mqtt://broker.hivemq.com:1883 -topic YOUR_TOPIC
 ```
 
-### Battery Optimization vs Connection Stability (Server Mode)
-
-> **Note:** This section applies to **server mode** (running `mqtt-tunnel -server :8022`
-> on your Termux device), which is the typical use case for Termux.
-
-Android's Doze mode and power management can cause frequent MQTT disconnections
-(typically every 30-60 seconds). This varies significantly by:
-- Android version
-- OEM (Samsung, Xiaomi, Pixel, etc. have different strategies)
-- Battery optimization settings
-
-**Enable logging to diagnose disconnections:**
-
-Add to your config:
-```json
-{
-    "broker": "mqtt://broker.hivemq.com:1883",
-    "topic": "your-topic",
-    "server": ":8022",
-    "log-file": "~/mqtt-tunnel.log",
-    "verbose": true
-}
-```
-
-Or use command line:
-```bash
-mqtt-tunnel -c server.json -log-file ~/mqtt-tunnel.log -verbose
-```
-
-**Solutions to try (in order):**
-
-1. **termux-wake-lock** (most reliable, higher battery drain)
-   ```bash
-   termux-wake-lock
-   ```
-   Keeps CPU awake. May drain 1-3% extra battery per hour.
-
-2. **Reduce MQTT keepalive** (balance between battery and stability)
-   ```json
-   {
-       "broker": "mqtt://broker.hivemq.com:1883",
-       "topic": "your-topic",
-       "server": ":8022",
-       "mqtt-keepalive": 15
-   }
-   ```
-   Shorter keepalive (15-20s) **may** prevent Doze from kicking in.
-   Experiment with values: 10, 15, 20, 30 seconds.
-
-3. **Disable battery optimization for Termux** (system setting)
-   Settings → Apps → Termux → Battery → Unrestricted
-   (Exact path varies by OEM)
-
-4. **Combination approach**
-   Use shorter keepalive (15s) + wakelock only during active SSH sessions
-
-**Note:** Every Android device behaves differently. You may need to experiment
-to find the right balance for your specific device.
-
-**Timezone / Local Time in Logs:**
-
-The Termux binary is statically linked and includes an embedded timezone database.
-To display local time in logs (instead of UTC), set the `TZ` environment variable:
-
-```bash
-# Find your timezone
-getprop persist.sys.timezone
-
-# Run with TZ set
-TZ=Europe/Athens mqtt-tunnel -c config.json
-
-# Or make it permanent
-export TZ=Europe/Athens
-echo 'export TZ=Europe/Athens' >> ~/.bashrc
-```
-
-Common timezone values: `Europe/Athens`, `Europe/London`, `America/New_York`, `Asia/Tokyo`,
-or use `EET`, `CET`, `EST` for short forms.
+**Note:** The Termux build automatically sets `manual-keepalive` to 60 seconds by default to work better with Android's Doze mode. See [README_TERMUX.md](README_TERMUX.md) for details.
 
 ### 4. Test the Connection
 
@@ -352,6 +254,24 @@ The config understands **$HOME/to/file** and "~/to/file" expansions for example
     "log-file": "~/log/mqtt-tunnel.log"
 }
 ```
+
+### Keepalive Options
+
+The following options control connection keepalive:
+
+**mqtt-keepalive** (default: 60 seconds, 0 or negative to disable)
+- Paho MQTT library's built-in keepalive interval
+- Sends PINGREQ packets at this interval to keep connection alive
+- Set to 0 or negative to disable (use manual-keepalive instead)
+
+**manual-keepalive** (default: 0 = disabled, 60 on Termux)
+- Custom keepalive mechanism for server mode only
+- After the specified seconds of inactivity, sends a PING to `baseTopic/ping`
+- Expects the broker to echo the packet back within 5 seconds
+- If no echo received, connection is disconnected and reconnection is triggered
+- When enabled, automatically disables mqtt-keepalive (sets Paho keepalive to 1 hour)
+- Useful for Android/Termux where Doze mode interferes with standard keepalive
+- **On Termux**, defaults to 60 seconds automatically. See [README_TERMUX.md](README_TERMUX.md) for details.
 
 ## Command-Line Options
 
@@ -390,6 +310,10 @@ The startup log lines show critical connection details:
 | `topic subscribing` | Subscribed to control topics |
 | `ack received` | Server acknowledged connection, topics assigned |
 | `protocol version mismatch` | Client and server have different protocol versions - update both |
+| `using manual-keepalive` | Server using manual keepalive instead of Paho's built-in |
+| `Paho MQTT keepalive disabled` | Paho keepalive disabled (using manual-keepalive or explicitly disabled) |
+| `manual ping echo received` | (Server with manual-keepalive) Ping echo received from broker |
+| `manual ping response timeout` | (Server with manual-keepalive) Ping echo not received, reconnecting |
 
 **Still having issues?**
 

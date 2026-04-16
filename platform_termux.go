@@ -27,6 +27,12 @@ func initPlatform() {
     }
 }
 
+// getDefaultManualKeepalive returns the default manual keepalive interval for this platform
+// On Termux, we default to 60 seconds to work better with Android's Doze mode
+func getDefaultManualKeepalive() int {
+    return 60
+}
+
 func getPlatformInfo() string {
-    return "Termux build: GOMAXPROCS=1, MaxThreads=10, DNS=1.1.1.1"
+    return "Termux build: GOMAXPROCS=1, MaxThreads=10, DNS=1.1.1.1, DefaultManualKeepalive=60s"
 }

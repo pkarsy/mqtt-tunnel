@@ -209,12 +209,17 @@ func (tun *Tunnel) mainLoop(ctx context.Context) {
 				}
 				// Signal exit for client mode (bypasses MQTT)
 				if !tun.mqttBroker.isServerMode {
-					tun.mqttBroker.tunnelDoneCh <- struct{}{}
+					debugf("sending tunnelDoneCh signal")
+					if !safeSendWithDebug(tun.mqttBroker.tunnelDoneCh, struct{}{}, "tunnelDoneCh") {
+						log.Printf("[WARN] Failed to signal tunnel done - channel full")
+					}
 				}
 				// Signal cleanup for server mode (sends tunnel ID)
 				if tun.mqttBroker.isServerMode {
 					debugf("sending tunnelClosedCh signal")
-					tun.mqttBroker.tunnelClosedCh <- tun.ID
+					if !safeSendWithDebug(tun.mqttBroker.tunnelClosedCh, tun.ID, "tunnelClosedCh") {
+						log.Printf("[WARN] Failed to signal tunnel closed - channel full, tunnel_id=%s", tun.ID)
+					}
 				}
 				return
 			}

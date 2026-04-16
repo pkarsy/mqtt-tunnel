@@ -31,6 +31,8 @@ type MQTunnel struct {
 
 	isServerMode bool // true if running in server mode, false if client mode
 
+	reloadCh chan Config // channel for config reload (server mode only)
+
 	mu sync.Mutex
 }
 
@@ -38,13 +40,14 @@ func NewMQTunnel(conf Config, isServerMode bool, logOutput io.Writer) (*MQTunnel
 	ret := MQTunnel{
 		conf: conf,
 
-		controlCh: make(chan controlPacket),
+		controlCh: make(chan controlPacket, 100), // Buffered to prevent deadlock during high message volume
 		localCh:   make(chan net.Conn, 1), // buffered to prevent blocking on initial send
 
 		ackWaiting:      make(map[string]*Tunnel),
 		pendingConfirms: make(map[string]*Tunnel),
 		connected:       make(map[string]*Tunnel),
 		isServerMode:    isServerMode,
+		reloadCh:        make(chan Config, 1), // Buffered to prevent deadlock during config reload
 	}
 
 	mqBroker, err := NewMQTTBroker(conf, ret.controlCh, isServerMode, logOutput)
@@ -55,6 +58,13 @@ func NewMQTunnel(conf Config, isServerMode bool, logOutput io.Writer) (*MQTunnel
 	ret.mqttBroker.SetTunnelMaps(ret.connected, ret.ackWaiting, ret.pendingConfirms)
 
 	return &ret, nil
+}
+
+// ReloadConfig triggers a config reload (server mode only)
+func (mqt *MQTunnel) ReloadConfig(conf Config) {
+	// Update debug logging setting
+	SetVerboseLogging(conf.Debug)
+	mqt.reloadCh <- conf
 }
 
 // StartStdio starts a MQTT tunnel using stdin/stdout instead of a listening port.
@@ -152,24 +162,7 @@ func (mqt *MQTunnel) StartRemote(ctx context.Context) error {
 		case <-mqt.mqttBroker.ReconnectCh():
 			// MQTT disconnected in remote mode - close all tunnels and reconnect
 			log.Println("[WARN] MQTT connection lost, closing all tunnels and reconnecting")
-			mqt.mu.Lock()
-			for id, tun := range mqt.connected {
-				log.Printf("[INFO] closing tunnel due to MQTT disconnect tunnel_id=%s", id)
-				tun.cancel()
-				delete(mqt.connected, id)
-			}
-			for id, tun := range mqt.ackWaiting {
-				log.Printf("[INFO] closing pending tunnel due to MQTT disconnect tunnel_id=%s", id)
-				tun.cancel()
-				delete(mqt.ackWaiting, id)
-			}
-			for id, tun := range mqt.pendingConfirms {
-				log.Printf("[INFO] closing pending confirm tunnel due to MQTT disconnect tunnel_id=%s", id)
-				tun.cancel()
-				mqt.mqttBroker.unsubscribe(tun.ServerPubTopic)
-				delete(mqt.pendingConfirms, id)
-			}
-			mqt.mu.Unlock()
+			mqt.closeAllTunnels()
 
 			// Attempt to reconnect to MQTT broker
 			//debugf("attempting to reconnect to MQTT broker")
@@ -188,9 +181,57 @@ func (mqt *MQTunnel) StartRemote(ctx context.Context) error {
 			}
 			mqt.mu.Unlock()
 
+		case newConf := <-mqt.reloadCh:
+			// Config reload requested - close all tunnels and reconnect with new config
+			log.Println("[INFO] Reloading config file, closing all tunnels and reconnecting")
+			mqt.closeAllTunnels()
+
+			// Disconnect from MQTT broker
+			mqt.mqttBroker.client.Disconnect(250)
+
+			// Update config
+			mqt.conf = newConf
+
+			// Create new MQTT broker with new config
+			mqBroker, err := NewMQTTBroker(mqt.conf, mqt.controlCh, mqt.isServerMode, nil)
+			if err != nil {
+				log.Printf("[ERROR] Failed to create new MQTT broker after config reload: %v", err)
+				return fmt.Errorf("failed to create MQTT broker after reload: %w", err)
+			}
+			mqt.mqttBroker = mqBroker
+			mqt.mqttBroker.SetTunnelMaps(mqt.connected, mqt.ackWaiting, mqt.pendingConfirms)
+
+			// Start the new MQTT broker
+			go mqt.mqttBroker.start(ctx)
+
+			log.Println("[INFO] Config file reloaded successfully")
+
 		case <-ctx.Done():
 			return ctx.Err()
 		}
+	}
+}
+
+// closeAllTunnels closes all active tunnels
+func (mqt *MQTunnel) closeAllTunnels() {
+	mqt.mu.Lock()
+	defer mqt.mu.Unlock()
+
+	for id, tun := range mqt.connected {
+		log.Printf("[INFO] closing tunnel tunnel_id=%s", id)
+		tun.cancel()
+		delete(mqt.connected, id)
+	}
+	for id, tun := range mqt.ackWaiting {
+		log.Printf("[INFO] closing pending tunnel tunnel_id=%s", id)
+		tun.cancel()
+		delete(mqt.ackWaiting, id)
+	}
+	for id, tun := range mqt.pendingConfirms {
+		log.Printf("[INFO] closing pending confirm tunnel tunnel_id=%s", id)
+		tun.cancel()
+		mqt.mqttBroker.unsubscribe(tun.ServerPubTopic)
+		delete(mqt.pendingConfirms, id)
 	}
 }
 func (mqt *MQTunnel) handleControl(ctx context.Context, ctl controlPacket) error {
@@ -331,7 +372,10 @@ func (mqt *MQTunnel) handleControl(ctx context.Context, ctl controlPacket) error
 		}
 		// Client mode: ALWAYS exit when server signals tunnel closed
 		if !mqt.isServerMode {
-			mqt.mqttBroker.tunnelDoneCh <- struct{}{}
+			debugf("sending tunnelDoneCh signal from handleControl")
+			if !safeSendWithDebug(mqt.mqttBroker.tunnelDoneCh, struct{}{}, "tunnelDoneCh") {
+				log.Printf("[WARN] Failed to signal tunnel done from handleControl - channel full")
+			}
 		}
 	default:
 		return fmt.Errorf("unknown control type, %s", ctl.Type)

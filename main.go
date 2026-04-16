@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"mqtt-tunnel/tunnel"
 )
@@ -176,10 +177,11 @@ func printSampleConfig() {
     "private-key": "",
     "server": ":22",  // absence of this line implies client mode
     "log-file": "",
-    "verbose": false,
+    "debug": false,
     "print-lines": false,
     "connection-timeout": 15,
-    "mqtt-keepalive": 60
+    "mqtt-keepalive": 60,
+    "manual-keepalive": 0  // Server only: send manual ping after N seconds of inactivity (0=disabled)
 }
 
 Required fields:
@@ -188,9 +190,7 @@ Required fields:
 
 Defaults:
   - connection-timeout: 15 seconds (tunnel establishment timeout)
-  - mqtt-keepalive: 60 seconds (MQTT ping interval)
-  
-Note: If SSH keepalive is configured shorter than mqtt-keepalive, SSH will detect disconnects first.
+  - mqtt-keepalive: 60 seconds (MQTT ping interval, 0 or negative to disable)
 
 Path expansion:
   Path fields (ca-cert, client-cert, private-key, log-file) support ~ and $HOME expansion.
@@ -202,21 +202,24 @@ func main() {
 	initPlatform()
 	//
 	var (
-		configFile        = flag.String("c", "", "alias for -config")
-		configFileFull    = flag.String("config", "", "config file path (use it to hide secrets from command line; use -config help to print a sample config)")
-		verbose           = flag.Bool("verbose", false, "verbose logging")
-		printLines        = flag.Bool("print-lines", false, "include file and line number in log messages")
-		logFile           = flag.String("log-file", "", "log file path")
-		broker            = flag.String("broker", "", "MQTT broker URL (e.g., mqtt://host:port, mqtts://host:port, ws://host:port, wss://host:port). Default ports: mqtt=1883, mqtts=8883, ws=80, wss=443)")
-		username          = flag.String("username", "", "MQTT username value")
-		password          = flag.String("password", "", "MQTT password value")
-		caCert            = flag.String("ca-cert", "", "CA certificate path")
-		clientCert        = flag.String("client-cert", "", "client certificate path")
-		privateKey        = flag.String("private-key", "", "private key path")
-		topic             = flag.String("topic", "", "control topic value (use 'generate' to create a secure random topic)")
-		server            = flag.String("server", "", "Enables server mode. The address (usually 127.0.0.1:22) is the address of the target service (most probably SSH) as viewed by the server mqtt-tunnel process. Absence of this option implies client mode.")
-		connectionTimeout = flag.Int("connection-timeout", 15, "connection timeout in seconds")
-		mqttKeepalive     = flag.Int("mqtt-keepalive", 0, "MQTT keepalive interval in seconds (default: 60)")
+		configFile         = flag.String("c", "", "alias for -config")
+		configFileFull     = flag.String("config", "", "config file path (use it to hide secrets from command line; use -config help to print a sample config)")
+		verbose            = flag.Bool("verbose", false, "")
+		debug              = flag.Bool("debug", false, "enable debug logging")
+		debugPaho          = flag.Bool("debug-paho", false, "enable Paho MQTT library debug logging (very noisy)")
+		printLines         = flag.Bool("print-lines", false, "include file and line number in log messages")
+		logFile            = flag.String("log-file", "", "log file path")
+		broker             = flag.String("broker", "", "MQTT broker URL (e.g., mqtt://host:port, mqtts://host:port, ws://host:port, wss://host:port). Default ports: mqtt=1883, mqtts=8883, ws=80, wss=443)")
+		username           = flag.String("username", "", "MQTT username value")
+		password           = flag.String("password", "", "MQTT password value")
+		caCert             = flag.String("ca-cert", "", "CA certificate path")
+		clientCert         = flag.String("client-cert", "", "client certificate path")
+		privateKey         = flag.String("private-key", "", "private key path")
+		topic              = flag.String("topic", "", "control topic value (use 'generate' to create a secure random topic)")
+		server             = flag.String("server", "", "Enables server mode. The address (usually 127.0.0.1:22) is the address of the target service (most probably SSH) as viewed by the server mqtt-tunnel process. Absence of this option implies client mode.")
+		connectionTimeout  = flag.Int("connection-timeout", 15, "connection timeout in seconds")
+		mqttKeepalive      = flag.Int("mqtt-keepalive", 0, "MQTT keepalive interval in seconds (default: 60)")
+		manualKeepalive = flag.Int("manual-keepalive", 0, "Manual ping interval in seconds (server mode only, 0=disabled). Sends PING to baseTopic/ping and expects echo response within 5s.")
 	)
 
 	flag.Usage = printUsage
@@ -338,8 +341,19 @@ func main() {
 		conf.MqttKeepalive = *mqttKeepalive
 	}
 
+	// Set manual ping interval from command line (0 means disabled, overrides config)
+	if *manualKeepalive > 0 {
+		conf.ManualKeepalive = *manualKeepalive
+	}
+
 	// Determine mode: server mode if ServerAddr is set, otherwise client mode
 	isServerMode := conf.ServerAddr != ""
+
+	// Apply platform-specific default for manual keepalive (server mode only)
+	// Client mode defaults to disabled (0) - uses SSH keepalive instead
+	if isServerMode && conf.ManualKeepalive == 0 {
+		conf.ManualKeepalive = getDefaultManualKeepalive()
+	}
 
 	// Use log file from config if not provided on command line
 	effectiveLogFile := *logFile
@@ -347,14 +361,19 @@ func main() {
 		effectiveLogFile = conf.LogFile
 	}
 
-	// Use verbose from config if not provided on command line
-	effectiveVerbose := *verbose || conf.Verbose
+	// Use debug from config if not provided on command line
+	effectiveVerbose := *verbose || *debug || conf.Debug
 
 	// Use print-lines from config if not provided on command line
 	effectivePrintLines := *printLines || conf.PrintLines
 
 	// Setup logging (client mode needs CRLF conversion)
 	logOutput := setupLog(effectiveVerbose, effectiveLogFile, !isServerMode, effectivePrintLines)
+
+	// Enable Paho debug logging if requested
+	if *debugPaho {
+		tunnel.SetDebugPahoLogging(true)
+	}
 
 	// Log the mode of operation
 	if isServerMode {
@@ -376,12 +395,112 @@ func main() {
 		log.Printf("[INFO]   root-topic=%s", conf.Topic)
 	}
 
+	// Log keepalive settings
+	if conf.MqttKeepalive > 0 {
+		log.Printf("[INFO] mqtt-keepalive enabled: %ds", conf.MqttKeepalive)
+	} else {
+		log.Printf("[INFO] mqtt-keepalive disabled")
+	}
+	if conf.ManualKeepalive > 0 {
+		log.Printf("[INFO] manual-keepalive enabled: %ds", conf.ManualKeepalive)
+	} else {
+		log.Printf("[INFO] manual-keepalive disabled")
+	}
+
 	mqt, err := tunnel.NewMQTunnel(conf, isServerMode, logOutput)
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	ctx := context.Background()
+
+	// Setup config file hot reload for server mode only
+	if isServerMode && effectiveConfigFile != "" {
+		reloader, err := tunnel.NewConfigReloader(
+			effectiveConfigFile,
+			10*time.Second, // 10 second debounce
+			func() {
+				// Read and validate new config
+				newConf, err := tunnel.ReadConfig(effectiveConfigFile)
+				if err != nil {
+					log.Printf("[ERROR] Config reload failed: %v", err)
+					log.Printf("[INFO] Continuing with current config")
+					return
+				}
+
+				// Apply command-line overrides to new config
+				if *broker != "" {
+					newConf.BrokerURL = *broker
+				}
+				if *username != "" {
+					newConf.Username = *username
+				}
+				if *password != "" {
+					newConf.Password = *password
+				}
+				if *caCert != "" {
+					newConf.CaCert = *caCert
+				}
+				if *clientCert != "" {
+					newConf.ClientCert = *clientCert
+				}
+				if *privateKey != "" {
+					newConf.PrivateKey = *privateKey
+				}
+				if *topic != "" {
+					newConf.Topic = *topic
+				}
+				if *server != "" {
+					newConf.ServerAddr = expandServerAddr(*server)
+				} else if newConf.ServerAddr != "" {
+					newConf.ServerAddr = expandServerAddr(newConf.ServerAddr)
+				}
+				newConf.ConnectionTimeout = *connectionTimeout
+				if *mqttKeepalive > 0 {
+					newConf.MqttKeepalive = *mqttKeepalive
+				}
+				if *manualKeepalive > 0 {
+					newConf.ManualKeepalive = *manualKeepalive
+				}
+
+				// Apply platform-specific default for manual keepalive if not set
+				// Note: reload only happens in server mode, so we always apply the default
+				if newConf.ManualKeepalive == 0 {
+					newConf.ManualKeepalive = getDefaultManualKeepalive()
+				}
+
+				// Apply debug settings (command-line overrides config file)
+				// Note: newConf.Debug already includes newConf.Verbose (deprecated alias)
+				newConf.Debug = *verbose || *debug || newConf.Debug
+
+				// Validate required fields
+				if newConf.BrokerURL == "" {
+					log.Printf("[ERROR] Config reload failed: MQTT broker URL is required")
+					log.Printf("[INFO] Continuing with current config")
+					return
+				}
+				if newConf.Topic == "" {
+					log.Printf("[ERROR] Config reload failed: control topic is required")
+					log.Printf("[INFO] Continuing with current config")
+					return
+				}
+				if err := tunnel.ValidateTopic(newConf.Topic); err != nil {
+					log.Printf("[ERROR] Config reload failed: invalid topic: %v", err)
+					log.Printf("[INFO] Continuing with current config")
+					return
+				}
+
+				// Trigger reload
+				mqt.ReloadConfig(newConf)
+			},
+		)
+		if err != nil {
+			log.Printf("[WARN] Failed to setup config file watcher: %v", err)
+		} else {
+			reloader.Start()
+			log.Printf("[INFO] Config file hot reload enabled (debounce: 10s)")
+		}
+	}
 
 	if isServerMode {
 		// Server mode - wait for connections and forward to target service

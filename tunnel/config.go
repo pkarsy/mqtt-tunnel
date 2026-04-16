@@ -39,7 +39,8 @@ type Config struct {
 	Topic      string `json:"topic"`
 	ServerAddr string `json:"server"`
 	LogFile    string `json:"log-file"`
-	Verbose    bool   `json:"verbose"`
+	Debug      bool   `json:"debug"`   // primary field for debug logging
+	Verbose    bool   `json:"verbose"` // deprecated alias for debug, kept for backward compatibility
 	PrintLines bool   `json:"print-lines"`
 
 	// ConnectionTimeout is the maximum time to wait for tunnel establishment (in seconds)
@@ -47,8 +48,14 @@ type Config struct {
 	ConnectionTimeout int `json:"connection-timeout"`
 
 	// MqttKeepalive is the MQTT ping interval in seconds
-	// Default: 60 seconds
+	// Default: 60 seconds (if not specified or 0 in old configs)
+	// Note: Zero or negative values disable Paho's built-in keepalive
 	MqttKeepalive int `json:"mqtt-keepalive"`
+
+	// ManualKeepalive is the interval in seconds for manual keepalive/ping
+	// 0 = disabled (default)
+	// Server sends PING to baseTopic/ping and expects echo response
+	ManualKeepalive int `json:"manual-keepalive"`
 }
 
 func ReadConfig(filePath string) (Config, error) {
@@ -76,10 +83,12 @@ func ReadConfig(filePath string) (Config, error) {
 		"topic":              true,
 		"server":             true,
 		"log-file":           true,
-		"verbose":            true,
+		"debug":              true,
+		"verbose":            true, // deprecated alias for debug
 		"print-lines":        true,
 		"connection-timeout": true,
 		"mqtt-keepalive":     true,
+		"manual-keepalive":   true,
 	}
 
 	// Check for unknown keys
@@ -92,6 +101,9 @@ func ReadConfig(filePath string) (Config, error) {
 	if err := json.Unmarshal(buf, &ret); err != nil {
 		return ret, fmt.Errorf("read config marshal error: %w", err)
 	}
+
+	// Combine debug and verbose fields (verbose is deprecated alias for debug)
+	ret.Debug = ret.Debug || ret.Verbose
 
 	// Expand ~ and environment variables in path fields
 	ret.CaCert = expandPath(ret.CaCert)

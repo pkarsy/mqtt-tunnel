@@ -11,18 +11,25 @@ import (
 	"log"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 )
 
 var (
-	verboseLogging bool
+	verboseLogging    bool
+	debugPahoLogging  bool
 )
 
 // SetVerboseLogging enables or disables verbose (debug) logging
 func SetVerboseLogging(enabled bool) {
 	verboseLogging = enabled
+}
+
+// SetDebugPahoLogging enables or disables Paho MQTT library debug logging
+func SetDebugPahoLogging(enabled bool) {
+	debugPahoLogging = enabled
 }
 
 // randInt returns a uniform random int in [0, max) using crypto/rand with rejection sampling
@@ -92,6 +99,15 @@ type mqttBroker struct {
 	connected       *map[string]*Tunnel
 	ackWaiting      *map[string]*Tunnel
 	pendingConfirms *map[string]*Tunnel
+
+	// Manual ping/echo fields (server mode only)
+	pingTopic            string        // baseTopic/ping
+	lastActivityTime     time.Time     // last time any packet was received
+	pingPending          bool          // true if waiting for ping response
+	expectedPingResponse string        // expected ping echo payload
+	pingTimer            *time.Timer   // timer for next ping
+	pingTimeoutTimer     *time.Timer   // timer for ping response timeout
+	mu                   sync.Mutex    // protects ping fields
 }
 
 const mqttCommandsTimeout = 30 * time.Second
@@ -112,11 +128,17 @@ func NewMQTTBroker(conf Config, controlCh chan controlPacket, isServerMode bool,
 
 		controlCh:      controlCh,
 		reconnectCh:    make(chan bool),
-		tunnelDoneCh:   make(chan struct{}, 1),  // Buffered to avoid deadlock in client exit
-		tunnelClosedCh: make(chan string),
+		tunnelDoneCh:   make(chan struct{}, 1),   // Buffered to avoid deadlock in client exit
+		tunnelClosedCh: make(chan string, 10),    // Buffered to avoid deadlock during reconnect
 
-		connected:  nil,
-		ackWaiting: nil,
+		connected:        nil,
+		ackWaiting:       nil,
+		lastActivityTime: time.Now(),
+	}
+
+	// Setup ping topic for server mode
+	if isServerMode && conf.ManualKeepalive > 0 {
+		ret.pingTopic = conf.Topic + "/ping"
 	}
 
 	opts, err := getMQTTOptions(conf, clientID)
@@ -136,6 +158,11 @@ func NewMQTTBroker(conf Config, controlCh chan controlPacket, isServerMode bool,
 	}
 	mqtt.ERROR = log.New(logOutput, "[MQTT-ERROR] ", log.Ldate|log.Ltime)
 	mqtt.CRITICAL = log.New(logOutput, "[MQTT-CRITICAL] ", log.Ldate|log.Ltime)
+
+	// Enable Paho debug logging when debug-paho is enabled
+	if debugPahoLogging {
+		mqtt.DEBUG = log.New(logOutput, "[MQTT-DEBUG] ", log.Ldate|log.Ltime)
+	}
 
 	// connect to MQTT Broker
 	client := mqtt.NewClient(opts)
@@ -264,8 +291,12 @@ func (mqb *mqttBroker) subscribe() error {
 	if mqb.controlTopic != "" {
 		topics[mqb.controlTopic] = 1
 	}
-	for t, _ := range mqb.tunnelTopics {
+	for t := range mqb.tunnelTopics {
 		topics[t] = topicQoS
+	}
+	// Subscribe to ping topic in server mode
+	if mqb.pingTopic != "" {
+		topics[mqb.pingTopic] = topicQoS
 	}
 
 	if len(topics) == 0 {
@@ -299,19 +330,33 @@ func (mqb *mqttBroker) unsubscribe(topic string) error {
 }
 
 func (mqb *mqttBroker) onMessage(client mqtt.Client, msg mqtt.Message) {
-	debugf("on message topic=%s size=%d", msg.Topic(), len(msg.Payload()))
+	// Update activity time for any message (for manual ping)
+	mqb.updateActivity()
 
 	if msg.Topic() == mqb.controlTopic {
 		if err := mqb.controlPacketReceived(msg); err != nil {
 			log.Printf("[ERROR] %v", err)
 		}
+		// Restart ping timer after control activity
+		mqb.startPingTimer()
 		return
 	}
+
+	// Check if it's a ping topic message (server mode only)
+	if mqb.pingTopic != "" && msg.Topic() == mqb.pingTopic {
+		mqb.handlePingMessage(msg.Payload())
+		return
+	}
+
 	tun, exists := mqb.tunnelTopics[msg.Topic()]
 	if !exists {
 		debugf("requested topic is not exists topic=%s", msg.Topic())
 		return
 	}
+
+	// Restart ping timer after tunnel activity
+	mqb.startPingTimer()
+
 	tun.writeCh <- msg.Payload()
 }
 
@@ -400,6 +445,16 @@ func (mqb *mqttBroker) onConnect(client mqtt.Client) {
 	if err := mqb.subscribe(); err != nil {
 		log.Printf("[ERROR] subscribe failed error=%v", err)
 	}
+
+	// Start manual ping timer for server mode
+	if mqb.isServerMode && mqb.conf.ManualKeepalive > 0 {
+		// Reset activity time to now (connection time) to start the timer fresh
+		mqb.mu.Lock()
+		mqb.lastActivityTime = time.Now()
+		mqb.mu.Unlock()
+		mqb.startPingTimer()
+		log.Printf("[INFO] manual ping enabled (interval=%ds)", mqb.conf.ManualKeepalive)
+	}
 }
 
 func (mqb *mqttBroker) onReconnect(client mqtt.Client, opts *mqtt.ClientOptions) {
@@ -408,6 +463,17 @@ func (mqb *mqttBroker) onReconnect(client mqtt.Client, opts *mqtt.ClientOptions)
 
 func (mqb *mqttBroker) onMqttConnectionLost(client mqtt.Client, err error) {
 	log.Printf("[ERROR] MQTT connection lost: %v", err)
+
+	// Stop ping timers
+	mqb.mu.Lock()
+	if mqb.pingTimer != nil {
+		mqb.pingTimer.Stop()
+	}
+	if mqb.pingTimeoutTimer != nil {
+		mqb.pingTimeoutTimer.Stop()
+	}
+	mqb.pingPending = false
+	mqb.mu.Unlock()
 
 	// Client mode: exit immediately, no retry, no cleanup needed
 	if !mqb.isServerMode {
@@ -424,6 +490,16 @@ func (mqb *mqttBroker) onMqttConnectionLost(client mqtt.Client, err error) {
 	debugf("server mode: signalling reconnection needed")
 	select {
 	case mqb.reconnectCh <- true:
+	default:
+		// Already signaled
+	}
+}
+
+// signalReconnect signals that reconnection is needed (used by ping timeout)
+func (mqb *mqttBroker) signalReconnect() {
+	select {
+	case mqb.reconnectCh <- true:
+		debugf("signalled reconnection needed")
 	default:
 		// Already signaled
 	}
@@ -498,12 +574,18 @@ func getMQTTOptions(conf Config, clientID string) (*mqtt.ClientOptions, error) {
 	opts.SetCleanSession(true)
 	opts.SetAutoReconnect(true) // Enable to avoid Paho bug, but we exit on disconnect in local mode
 	opts.SetConnectRetryInterval(20 * time.Second)
-	// MQTT keepalive interval
-	keepalive := time.Duration(conf.MqttKeepalive) * time.Second
-	if keepalive == 0 {
-		keepalive = 60 * time.Second
+	// MQTT keepalive interval configuration
+	if conf.ManualKeepalive > 0 {
+		// Manual keepalive is enabled - set Paho keepalive to 1 hour to effectively disable it
+		// This prevents Paho's default 30s keepalive from interfering with manual keepalive
+		opts.SetKeepAlive(3600 * time.Second)
+		log.Printf("[INFO] using manual-keepalive=%ds, Paho keepalive set to 1h (effectively disabled)", conf.ManualKeepalive)
+	} else if conf.MqttKeepalive > 0 {
+		// Use Paho keepalive
+		keepalive := time.Duration(conf.MqttKeepalive) * time.Second
+		opts.SetKeepAlive(keepalive)
 	}
-	opts.SetKeepAlive(keepalive)
+	// If both are <= 0, Paho uses its default 30s keepalive
 
 	return opts, nil
 }
@@ -516,4 +598,105 @@ func logTopic(topics map[string]byte) []string {
 	}
 
 	return ret
+}
+
+// updateActivity updates the last activity timestamp
+func (mqb *mqttBroker) updateActivity() {
+	mqb.mu.Lock()
+	mqb.lastActivityTime = time.Now()
+	mqb.mu.Unlock()
+}
+
+// startPingTimer starts/restarts the ping timer
+func (mqb *mqttBroker) startPingTimer() {
+	if mqb.conf.ManualKeepalive <= 0 || !mqb.isServerMode {
+		return
+	}
+
+	mqb.mu.Lock()
+	defer mqb.mu.Unlock()
+
+	if mqb.pingTimer != nil {
+		mqb.pingTimer.Stop()
+	}
+
+	interval := time.Duration(mqb.conf.ManualKeepalive) * time.Second
+	mqb.pingTimer = time.AfterFunc(interval, mqb.sendPing)
+}
+
+// sendPing sends a PING packet and starts timeout timer
+func (mqb *mqttBroker) sendPing() {
+	mqb.mu.Lock()
+	if mqb.pingPending {
+		// Previous ping not answered, connection may be dead
+		log.Printf("[WARN] manual ping timeout - no echo received from previous ping, disconnecting")
+		mqb.mu.Unlock()
+		// Disconnect asynchronously to avoid deadlock
+		go mqb.client.Disconnect(250)
+		return
+	}
+
+	mqb.pingPending = true
+	mqb.mu.Unlock()
+
+	// Generate random ping payload
+	pingPayload := GenerateRandomID(8)
+
+	debugf("sending manual ping: %s", pingPayload)
+
+	// Store expected response
+	mqb.mu.Lock()
+	mqb.expectedPingResponse = pingPayload
+	mqb.mu.Unlock()
+
+	// Publish ping
+	token := mqb.client.Publish(mqb.pingTopic, 0, false, pingPayload)
+	token.Wait()
+
+	// Start timeout timer (5 seconds)
+	mqb.mu.Lock()
+	mqb.pingTimeoutTimer = time.AfterFunc(5*time.Second, func() {
+		mqb.mu.Lock()
+		pending := mqb.pingPending
+		if pending {
+			mqb.pingPending = false
+		}
+		mqb.mu.Unlock()
+		
+		if pending {
+			log.Printf("[WARN] manual ping response timeout (5s), triggering reconnect")
+			// Signal reconnect and disconnect
+			mqb.signalReconnect()
+			mqb.client.Disconnect(250)
+		}
+	})
+	mqb.mu.Unlock()
+}
+
+// handlePingMessage handles incoming messages on ping topic
+func (mqb *mqttBroker) handlePingMessage(payload []byte) {
+	mqb.mu.Lock()
+	defer mqb.mu.Unlock()
+
+	// Update activity time
+	mqb.lastActivityTime = time.Now()
+
+	if mqb.pingPending {
+		// This is a response to our ping
+		if string(payload) == mqb.expectedPingResponse {
+			debugf("manual ping echo received: %s", payload)
+			mqb.pingPending = false
+			if mqb.pingTimeoutTimer != nil {
+				mqb.pingTimeoutTimer.Stop()
+			}
+			// Restart ping timer
+			go mqb.startPingTimer()
+		} else {
+			log.Printf("[WARN] manual ping echo mismatch: expected %s, got %s",
+				mqb.expectedPingResponse, payload)
+		}
+	} else {
+		// Unexpected ping message, log it
+		debugf("unexpected ping message: %s", payload)
+	}
 }
