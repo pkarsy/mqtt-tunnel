@@ -37,3 +37,5 @@ release/
 
 # AI Assistant guidelines
 README_AI.md
+deploy.sh
+deploy2.sh

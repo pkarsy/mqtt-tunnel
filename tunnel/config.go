@@ -39,6 +39,7 @@ type Config struct {
 	Topic      string `json:"topic"`
 	ServerAddr string `json:"server"`
 	LogFile    string `json:"log-file"`
+	LogFileSize int   `json:"log-file-size"` // Max log file size in bytes (default 50000). 0=default, negative=discard
 	Debug      bool   `json:"debug"`   // primary field for debug logging
 	Verbose    bool   `json:"verbose"` // deprecated alias for debug, kept for backward compatibility
 	PrintLines bool   `json:"print-lines"`
@@ -83,6 +84,7 @@ func ReadConfig(filePath string) (Config, error) {
 		"topic":              true,
 		"server":             true,
 		"log-file":           true,
+		"log-file-size":      true,
 		"debug":              true,
 		"verbose":            true, // deprecated alias for debug
 		"print-lines":        true,

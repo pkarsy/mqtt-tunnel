@@ -453,7 +453,6 @@ func (mqb *mqttBroker) onConnect(client mqtt.Client) {
 		mqb.lastActivityTime = time.Now()
 		mqb.mu.Unlock()
 		mqb.startPingTimer()
-		log.Printf("[INFO] manual ping enabled (interval=%ds)", mqb.conf.ManualKeepalive)
 	}
 }
 
@@ -575,17 +574,19 @@ func getMQTTOptions(conf Config, clientID string) (*mqtt.ClientOptions, error) {
 	opts.SetAutoReconnect(true) // Enable to avoid Paho bug, but we exit on disconnect in local mode
 	opts.SetConnectRetryInterval(20 * time.Second)
 	// MQTT keepalive interval configuration
+	// Always explicitly set Paho keepalive, never rely on default
 	if conf.ManualKeepalive > 0 {
 		// Manual keepalive is enabled - set Paho keepalive to 1 hour to effectively disable it
-		// This prevents Paho's default 30s keepalive from interfering with manual keepalive
 		opts.SetKeepAlive(3600 * time.Second)
-		log.Printf("[INFO] using manual-keepalive=%ds, Paho keepalive set to 1h (effectively disabled)", conf.ManualKeepalive)
-	} else if conf.MqttKeepalive > 0 {
-		// Use Paho keepalive
+		debugf("using manual-keepalive=%ds, Paho keepalive set to 1h (effectively disabled)", conf.ManualKeepalive)
+	} else {
+		// Use Paho keepalive - always explicitly set
 		keepalive := time.Duration(conf.MqttKeepalive) * time.Second
 		opts.SetKeepAlive(keepalive)
+		if conf.MqttKeepalive >= 3600 {
+			log.Printf("[INFO] Paho keepalive disabled (set to %ds)", conf.MqttKeepalive)
+		}
 	}
-	// If both are <= 0, Paho uses its default 30s keepalive
 
 	return opts, nil
 }

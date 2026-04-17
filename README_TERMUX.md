@@ -19,8 +19,8 @@ Android's Doze mode can delay timers when the device is idle and no wake lock is
 mqtt-tunnel provides a `manual-keepalive` option that works better on Android:
 
 - **Default on Termux**: 60 seconds (automatically applied, no config needed)
-- **How it works**: Sends a PING message to the topic and waits for an echo response
-- **Advantage**: More tolerant of timer delays caused by Doze mode
+- **How it works**: Sends a PING message to the topic and waits for an echo response. The server does not enforce a time window.
+- **Advantage**: Tolerant of timer delays caused by Doze mode. The server does not test if the connection is healthy, only the client.
 
 ### Configuration
 
@@ -31,13 +31,8 @@ In your `config.json`:
     "broker": "mqtt://broker.hivemq.com:1883",
     "topic": "your-topic",
     "server": ":8022",
-    "manual-keepalive": 60
+    "manual-keepalive": 60 # This is the default, you can ommit
 }
-```
-
-Or via command line:
-```bash
-mqtt-tunnel -config config.json -manual-keepalive 60
 ```
 
 ### Trade-offs
@@ -47,12 +42,13 @@ mqtt-tunnel -config config.json -manual-keepalive 60
 - Higher CPU usage
 - More battery drain
 - More data usage
+- use it only if the default does not work.
 
 **Longer intervals (e.g., 60-120 seconds):**
 - Better battery life
 - Less data usage
-- May allow Doze mode to activate between pings
-- Slower detection of connection issues
+- May allow Doze mode to activate between pings(but the server does not drop the connection). The response from the SSH server will be sluggish but the bettery will be preserved. When connected you can run "termux-wake-lock" and on disconnect "termux-wake-unlock"
+- Slower detection of connection issues (but 1-2 min is usually acceptable)
 
 ### Recommendation
 
@@ -197,7 +193,7 @@ or use `EET`, `CET`, `EST` for short forms.
 ssh termux-mqtt 'termux-notification -c "Remember the Milk"; echo Notification sent'
 
 # Copy to clipboard
-ssh termux-mqtt termux-clipboard-set password/anything
+ssh termux-mqtt termux-clipboard-set MyPassword
 ```
 
 Works the same on home or work, wifi or mobile data.

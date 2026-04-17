@@ -3,15 +3,16 @@
 SSH proxy via MQTT
 
 - **No port forwarding** required
-- **No open ports in server firewall**
-- **Works with any NAT** configuration. Even with difficult scenarios where hole punching cannot work like double NAT, Symmetric NAT
-- **Zero-config** with free public MQTT brokers (Mosquitto, HiveMQ). Maintaining login credentials is a mental burden and a point of failure.
-- Perfect for occasional maintenance connections and light work, one off commands
-- Potentially useful for android/termux
+- **No DNS/ Dynamic DNS**
+- **No open ports**
+- **Works with any NAT** configuration. Even with scenarios where hole punching ahs problems, like double NAT, Symmetric NAT
+- **Zero-config** with free public MQTT brokers (Mosquitto, HiveMQ). Expired/lost login credentials is a frequent point of failure.
+- Suitable for occasional maintenance connections and light work, one off commands
+- Useful for android/termux
   ``` bash
   > ssh termux-mqtt 'termux-notification -c "Remember the Milk" ; echo Notification sent'
   
-  > ssh termux-mqtt termux-clipboard-set password/anything
+  > ssh termux-mqtt termux-clipboard-set MyPassword
   ```  
   works the same on home or work, wifi or mobile data.
   
@@ -42,8 +43,6 @@ All negotiation is performed in the control topic (e.g., baseTopic/ctl) but the 
 
 Binaries are provided in [releases page](https://github.com/yourusername/mqtt-tunnel/releases).
 
-**For Termux/Android:** See [README_TERMUX.md](README_TERMUX.md) for Android-specific installation and setup instructions.
-
 ### 1. Create a Configuration File
 
 #### Config File Location
@@ -65,8 +64,6 @@ When using a filename without path separators (e.g., `server.json`), the program
 2. If not found, looks in current directory `./server.json`
 
 This allows terse commands while keeping configs organized in the standard location.
-
-To force current directory, use `./server.json` or a full path.
 
 **3. Full path:**
 ```bash
@@ -91,7 +88,7 @@ On the remote SSH server:
 {
     "broker": "mqtt://broker.hivemq.com:1883", # the same as on client
     "topic": "gFAftaCL", # the same as on client
-    "log-file": ~/mqtt-tunnel.log, # for debugging change to "/dev/tty" or "tail -f ~/mqtt-tunnel.log"
+    "log-file": ~/mqtt-tunnel.log, # for debugging change to "/dev/tty" or do a "tail -f ~/mqtt-tunnel.log"
     "server": ":22" # or "127.0.0.1:22" or ":8022" for termux, see the dedicated README
 }
 
@@ -108,9 +105,9 @@ The topic does not contribute to the SSH security. However it must remain secret
 
 There is no fighting for topics with all the other users, neither need to hide the topic, so:
 - You can use shorter topics e.g. `-topic ssh` or `-topic comm/ssh`
-- In this case `/` can be useful to limit the mqtt messages in a specific topic hierarchy or to comply with broker rules.
+- In this case `/` can be useful to limit the mqtt messages in a specific topic hierarchy.
 
-In both cases do not use topics longer than necessary (let's say 10 chars), to avoid increasing the packet size.
+In both cases do not use topics longer than necessary (let's say up to 10 chars), to avoid increasing the packet size.
 
 **Supported broker URL formats:**
 
@@ -125,7 +122,7 @@ In both cases do not use topics longer than necessary (let's say 10 chars), to a
 - `mqtt://broker.hivemq.com:1883` - Reliable, free public broker
 - `mqtt://test.mosquitto.org:1883` - Community MQTT broker
 
-These services are provided for the common good. **Please use responsibly**. Avoid large file transfers or sustained high-bandwidth usage.
+**These services are provided for the common good. Please use responsibly**. Avoid large file transfers or sustained high-bandwidth usage.
 
 ### 2. Start the Server
 
@@ -135,15 +132,12 @@ On the server (the one you want to SSH into):
 # Using terse syntax - looks in ~/.config/mqtt-tunnel/ first, then current directory
 mqtt-tunnel -c server.json
 
-# Or (recommended) place config in ~/.config/mqtt-tunnel/default.json and omit -c entirely
+# Or place config in ~/.config/mqtt-tunnel/default.json and omit -c entirely
 mqtt-tunnel
 
 # If you are starting it from a script
 setsid -f mqtt-tunnel
 ```
-
-
-> **Note:** The `-server` flag accepts a shorthand: `:22` is expanded to `127.0.0.1:22`. Use `:8022` for Termux SSH.
 
 **Auto-start on boot** (add to crontab with `crontab -e`, no root is needed):
 
@@ -151,23 +145,20 @@ setsid -f mqtt-tunnel
 # assuming mqtt-tunnel and server.json are under ~/tunnel. The ./server.json (The ./) causes
 # lookup at current directory, and not under ~/.config/mqtt-tunnel/
 @reboot cd /home/user/tunnel && setsid -f ./mqtt-tunnel -c ./server.json
-# Or if mqtt-tunnel is on PATH and config is in ~/.config/mqtt-tunnel/default.json
+# Or if mqtt-tunnel is on $PATH and config is in ~/.config/mqtt-tunnel/default.json
 @reboot setsid -f mqtt-tunnel
 ```
 
-### 3. Configure SSH on client machine
+### 3. Configure SSH for the client machine
 
-**Important:** In client mode mqtt-tunnel is started as a subprocess of ssh client. Before configuring SSH, first test the tunnel standalone to verify it works correctly:
+**Important:** In client mode mqtt-tunnel is started as a subprocess of ssh client. Before configuring SSH, first test the mqtt-tunnel standalone, to verify it works correctly:
 
 ```bash
 # With terse syntax (looks in ~/.config/mqtt-tunnel/ first)
 mqtt-tunnel -c client.json
-
-# Or with default config location (no -c needed)
-mqtt-tunnel
 ```
 
-You should see the SSH server banner (e.g., `SSH-2.0-OpenSSH_8.9`). If you see errors like "protocol version mismatch", you may need to upgrade the server. Once verified working, proceed with SSH configuration below.
+You should see the **Remote** SSH server banner (e.g., `SSH-2.0-OpenSSH_8.9`). Once verified working, proceed with SSH configuration below.
 
 Add to your `~/.ssh/config`:
 
@@ -176,8 +167,6 @@ Host remote-via-mqtt
     HostName remote-server
     # Using terse syntax - config file in ~/.config/mqtt-tunnel/client.json
     ProxyCommand /path/to/mqtt-tunnel -c client.json
-    # Or with default config (default.json or config.json in ~/.config/mqtt-tunnel/)
-    # ProxyCommand /path/to/mqtt-tunnel
     # you can add `-log-file /dev/tty` to view the progress when running the ssh command
 ```
 
@@ -210,27 +199,6 @@ ClientAliveCountMax 3          # Disconnect after 3 minutes of silence
 Then restart sshd
 
 **Traffic impact:** ~1-2 KB/minute on client, almost nothing on server.
-
-### Termux (Android SSH Server) Setup
-
-For detailed Termux setup instructions, Android-specific considerations, and battery optimization tips, see **[README_TERMUX.md](README_TERMUX.md)**.
-
-Quick start for Termux:
-```bash
-# On phone (Termux):
-# Install: pkg install openssh termux-api
-# Place config in ~/.config/mqtt-tunnel/server.json and run:
-/path/to/mqtt-tunnel
-
-# On laptop (~/.ssh/config):
-Host termux-phone
-    HostName termux
-    ServerAliveInterval 10
-    ServerAliveCountMax 3
-    ProxyCommand /path/to/mqtt-tunnel -c client.json
-```
-
-**Note:** The Termux build automatically sets `manual-keepalive` to 60 seconds by default to work better with Android's Doze mode. See [README_TERMUX.md](README_TERMUX.md) for details.
 
 ### Topic Recycling with replace-topic
 

@@ -9,6 +9,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -92,7 +93,9 @@ func (cw *crlfWriter) Write(p []byte) (n int, err error) {
 	return cw.w.Write(modified)
 }
 
-func setupLog(verbose bool, logFile string, isLocal bool, printLines bool) io.Writer {
+const defaultLogFileSize = 50000 // 50KB default
+
+func setupLog(verbose bool, logFile string, logFileSize int, isLocal bool, printLines bool) io.Writer {
 	flags := log.Ldate | log.Ltime
 	if printLines {
 		flags |= log.Lshortfile
@@ -101,19 +104,70 @@ func setupLog(verbose bool, logFile string, isLocal bool, printLines bool) io.Wr
 
 	var output io.Writer
 	if logFile != "" {
-		f, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
-		if err != nil {
-			log.Fatalf("Failed to open log file: %v", err)
+		// Check if it's a regular file (not /dev/tty, /dev/null, etc.)
+		fi, err := os.Stat(logFile)
+		isRegularFile := err == nil && fi.Mode().IsRegular()
+
+		// Determine max size
+		maxSize := logFileSize
+		if maxSize == 0 {
+			maxSize = defaultLogFileSize
+		} else if !isRegularFile {
+			// log-file-size explicitly set but log-file is a special file
+			fmt.Fprintf(os.Stderr, "[INFO] log-file '%s' is a special file, log-file-size setting ignored\n", logFile)
+			maxSize = defaultLogFileSize
 		}
 
-		// Check if file is a regular file with existing contents (follows symlinks)
-		if realFi, err := os.Stat(logFile); err == nil && realFi.Mode().IsRegular() && realFi.Size() > 0 {
-			f.WriteString("\n ######## log starting ############\n")
-		}
+		if maxSize <= 0 {
+			// Discard mode - discard all log output
+			output = io.Discard
+		} else if isRegularFile && fi.Size() >= int64(2*maxSize) {
+			// File too large, truncate to last maxSize bytes at line boundary
+			content, err := os.ReadFile(logFile)
+			if err == nil && len(content) > maxSize {
+				// Find start of last maxSize bytes
+				start := len(content) - maxSize
+				// Find first newline after start (to avoid cutting a line)
+				for start < len(content) && content[start] != '\n' {
+					start++
+				}
+				if start < len(content) {
+					// Write from start+1 (after newline) to end
+					os.WriteFile(logFile, content[start+1:], 0666)
+				}
+			}
+			// Open for append
+			f, err := os.OpenFile(logFile, os.O_WRONLY|os.O_APPEND, 0666)
+			if err != nil {
+				log.Fatalf("Failed to open log file: %v", err)
+			}
+			output = f
+		} else {
+			// Normal append mode
+			f, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+			if err != nil {
+				log.Fatalf("Failed to open log file: %v", err)
+			}
 
-		output = f
+			// Check if file is a regular file with existing contents (follows symlinks)
+			if realFi, err := os.Stat(logFile); err == nil && realFi.Mode().IsRegular() && realFi.Size() > 0 {
+				f.WriteString("\n ######## log starting ############\n")
+			}
+
+			output = f
+		}
+	} else if isLocal && runtime.GOOS != "windows" {
+		// Client mode on Unix: use /dev/tty for visibility
+		// This ensures logs are visible even when stderr is redirected by SSH
+		tty, err := os.OpenFile("/dev/tty", os.O_WRONLY, 0)
+		if err == nil {
+			output = tty
+		} else {
+			// Fallback to stderr if /dev/tty is not available
+			output = os.Stderr
+		}
 	} else {
-		// All logs go to stderr to avoid interfering with tunnel data on stdout/stdin
+		// Default: stderr
 		output = os.Stderr
 	}
 
@@ -177,6 +231,7 @@ func printSampleConfig() {
     "private-key": "",
     "server": ":22",  // absence of this line implies client mode
     "log-file": "",
+    "log-file-size": 50000,  // Max log file size in bytes (default 50000). 0=default, negative=discard
     "debug": false,
     "print-lines": false,
     "connection-timeout": 15,
@@ -218,7 +273,7 @@ func main() {
 		topic              = flag.String("topic", "", "control topic value (use 'generate' to create a secure random topic)")
 		server             = flag.String("server", "", "Enables server mode. The address (usually 127.0.0.1:22) is the address of the target service (most probably SSH) as viewed by the server mqtt-tunnel process. Absence of this option implies client mode.")
 		connectionTimeout  = flag.Int("connection-timeout", 15, "connection timeout in seconds")
-		mqttKeepalive      = flag.Int("mqtt-keepalive", 0, "MQTT keepalive interval in seconds (default: 60)")
+		mqttKeepalive      = flag.Int("mqtt-keepalive", 0, "MQTT keepalive interval in seconds. 0 or 3600+ disables Paho keepalive. Default: 60s (PC server), 3600s (client/Termux)")
 		manualKeepalive = flag.Int("manual-keepalive", 0, "Manual ping interval in seconds (server mode only, 0=disabled). Sends PING to baseTopic/ping and expects echo response within 5s.")
 	)
 
@@ -343,12 +398,16 @@ func main() {
 	// Set connection timeout from command line
 	conf.ConnectionTimeout = *connectionTimeout
 
-	// Set MQTT keepalive from command line (0 means use config file value or default)
+	// Track if user explicitly set keepalive values
+	userSetMqttKeepalive := *mqttKeepalive > 0 || conf.MqttKeepalive > 0
+	userSetManualKeepalive := *manualKeepalive > 0 || conf.ManualKeepalive > 0
+
+	// Set MQTT keepalive from command line
 	if *mqttKeepalive > 0 {
 		conf.MqttKeepalive = *mqttKeepalive
 	}
 
-	// Set manual ping interval from command line (0 means disabled, overrides config)
+	// Set manual ping interval from command line
 	if *manualKeepalive > 0 {
 		conf.ManualKeepalive = *manualKeepalive
 	}
@@ -356,10 +415,46 @@ func main() {
 	// Determine mode: server mode if ServerAddr is set, otherwise client mode
 	isServerMode := conf.ServerAddr != ""
 
-	// Apply platform-specific default for manual keepalive (server mode only)
-	// Client mode defaults to disabled (0) - uses SSH keepalive instead
-	if isServerMode && conf.ManualKeepalive == 0 {
-		conf.ManualKeepalive = getDefaultManualKeepalive()
+	// Apply keepalive defaults and logic
+	if isServerMode {
+		// Server mode
+		if conf.ManualKeepalive > 0 {
+			// Manual keepalive is set - disable Paho keepalive
+			if userSetMqttKeepalive {
+				log.Printf("[WARN] both manual-keepalive and mqtt-keepalive are set, mqtt-keepalive ignored")
+			}
+			conf.MqttKeepalive = 3600 // Effectively disable Paho keepalive
+		} else if userSetMqttKeepalive {
+			// Only mqtt-keepalive is set
+			if conf.MqttKeepalive == 0 {
+				conf.MqttKeepalive = 3600 // 0 means disabled
+			}
+			conf.ManualKeepalive = 0
+		} else {
+			// Nothing set - apply platform defaults
+			conf.ManualKeepalive = getDefaultManualKeepalive()
+			if conf.ManualKeepalive > 0 {
+				// Termux: manual-keepalive default, disable Paho
+				conf.MqttKeepalive = 3600
+			} else {
+				// Other platforms: Paho keepalive default
+				conf.MqttKeepalive = 60
+			}
+		}
+	} else {
+		// Client mode - default to disabled unless explicitly set
+		if !userSetMqttKeepalive && !userSetManualKeepalive {
+			conf.MqttKeepalive = 3600 // Effectively disabled
+			conf.ManualKeepalive = 0
+		} else {
+			// User set at least one - use their values
+			if conf.MqttKeepalive == 0 && userSetMqttKeepalive {
+				conf.MqttKeepalive = 3600 // 0 means disabled
+			}
+			if !userSetMqttKeepalive {
+				conf.MqttKeepalive = 3600 // Default if not set
+			}
+		}
 	}
 
 	// Use log file from config if not provided on command line
@@ -368,6 +463,9 @@ func main() {
 		effectiveLogFile = conf.LogFile
 	}
 
+	// Use log file size from config
+	effectiveLogFileSize := conf.LogFileSize
+
 	// Use debug from config if not provided on command line
 	effectiveVerbose := *verbose || *debug || conf.Debug
 
@@ -375,7 +473,7 @@ func main() {
 	effectivePrintLines := *printLines || conf.PrintLines
 
 	// Setup logging (client mode needs CRLF conversion)
-	logOutput := setupLog(effectiveVerbose, effectiveLogFile, !isServerMode, effectivePrintLines)
+	logOutput := setupLog(effectiveVerbose, effectiveLogFile, effectiveLogFileSize, !isServerMode, effectivePrintLines)
 
 	// Enable Paho debug logging if requested
 	if *debugPaho {
@@ -403,7 +501,7 @@ func main() {
 	}
 
 	// Log keepalive settings
-	if conf.MqttKeepalive > 0 {
+	if conf.MqttKeepalive > 0 && conf.MqttKeepalive < 3600 {
 		log.Printf("[INFO] mqtt-keepalive enabled: %ds", conf.MqttKeepalive)
 	} else {
 		log.Printf("[INFO] mqtt-keepalive disabled")
