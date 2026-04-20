@@ -24,21 +24,20 @@ SSH proxy via MQTT
 - The data are encapsulated inside mqtt messages, so there is significant data overhead, given that the interactive SSH sessions use very small packets. This may be a concern on metered networks.
 
 ---
----
 
-### 🔧 Installation
+### `🔧 Installation`
 
 Binaries are provided in [releases page](https://github.com/yourusername/mqtt-tunnel/releases).
 
 This is the simplest possible installation, without login credentials and only a shared secret, the topic. Start with this for an easy setup, then you can modify as you wish.
 
-#### 1. Generate a random non guessagle topic
+#### `1. Generate a random non guessagle topic`
 
 >mqtt-tunnel -generate
 
 you can use a substring of this but not less than 8 chars, to avoid collissions(on open brokers).
 
-#### 2. 🌐 Configure the SSH server
+#### `2. 🌐 Configure the SSH server`
 
 On the remote SSH server and using a normal account(no root), create the file
 
@@ -61,7 +60,7 @@ mqtt-tunnel -c ./server.json          # looks in Current directory only
 **Leave it running**. We will see the negotiation when the client connects. At the end we will make the server autostart.
 
 
-#### 3. 🔐 Configuring the SSH client
+#### `3. 🔐 Configuring the SSH client`
 
 Create a file `~/.config/mqtt-tunnel/client.json`
 ```json
@@ -98,7 +97,7 @@ Congratulations !
 **Now we need some final actions:**
 
 
-#### 4. mqtt-tunnel on server autostart, and SSH fine tunning
+#### `4. mqtt-tunnel on server autostart, and SSH fine tunning`
 
 For example
 
@@ -115,7 +114,7 @@ To be able to view the daemon messages, add
 
 to `server.json` . The config is reloaded automatically
 
-Also it is recommended to add theese options ton sshd_config
+Also it is recommended to add theese options to sshd_config
 **Server side** (conservative, just to clean up stale sessions):
 ```
 # /etc/ssh/sshd_config
