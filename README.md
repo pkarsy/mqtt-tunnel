@@ -1,11 +1,30 @@
 ### mqtt-tunnel
 
 ---
+### TABLE OF CONTENTS
 
-SSH proxy via MQTT
+- [Overview](#overview)
+- [Installation](#-installation)
+- [Topic Best Practices](#-topic-best-practices)
+- [Supported Broker URL Formats](#-supported-broker-url-formats)
+- [Sample Configuration File](#-sample-configuration-file)
+- [Connection Keepalive](#-connection-keepalive)
+- [Command-Line Options](#-command-line-options)
+- [Troubleshooting](#-troubleshooting)
+- [Security Considerations](#-security-considerations)
+- [Alternative Methods of Login](#-alternative-methods-of-login)
+- [Semi Automatic Topic Change](#-semi-automatic-topic-change-with-rotate-topic)
+- [How It Works](#-how-it-works)
+- [Acknowledgments](#-acknowledgments)
+- [License](#license)
+- [Termux / Android Configuration](README_TERMUX.md)
+
+---
+### Overview
+Connect to remote SSH servers encapsulate the data iside mqtt packets.
 
 - **No port forwarding** required.
-- **No DNS/ Dynamic DNS** is needed.
+- **No DNS / Dynamic DNS** is needed.
 - **No open ports** in server.
 - **Works with any NAT** configuration. Even when hole punching has problems, like double NAT, Symmetric NAT.
 - **Zero-config** with free public MQTT brokers (Mosquitto, HiveMQ). Expired/lost login credentials are a frequent point of failure.
