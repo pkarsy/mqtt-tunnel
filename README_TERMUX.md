@@ -24,16 +24,18 @@ mqtt-tunnel provides a `manual-keepalive` option that works better on Android:
 
 ### Configuration
 
-In your `config.json`:
+Example `termux-server.json`:
 
 ```json
 {
     "broker": "mqtt://broker.hivemq.com:1883",
     "topic": "your-topic",
     "server": ":8022",
-    "manual-keepalive": 60 # This is the default, you can ommit
+    "manual-keepalive": 60
 }
 ```
+
+Note: `manual-keepalive` defaults to 60 seconds on Termux, so you can omit it.
 
 ### Trade-offs
 
@@ -95,21 +97,21 @@ fi
 ```bash
 # On phone (Termux):
 # Install: pkg install openssh termux-api
-# Generate topic: mqtt-tunnel -topic generate
-# Place config in ~/.config/mqtt-tunnel/server.json and run:
-/path/to/mqtt-tunnel
+# Generate topic: mqtt-tunnel -generate
+# Place config in ~/.config/mqtt-tunnel/termux-server.json and run:
+/path/to/mqtt-tunnel -c termux-server.json
 
 # On laptop (~/.ssh/config):
 Host termux-phone
     HostName termux
     ServerAliveInterval 10
     ServerAliveCountMax 3
-    ProxyCommand /path/to/mqtt-tunnel -c client.json
+    ProxyCommand /path/to/mqtt-tunnel -c termux-client.json
 ```
 
 ## Battery Optimization vs Connection Stability
 
-> **Note:** This section applies to **server mode** (running `mqtt-tunnel -server :8022`
+> **Note:** This section applies to **server mode** (config with `"server": ":8022"`
 > on your Termux device), which is the typical use case for Termux.
 
 **WARNING:** Fighting with Android battery optimizations can be very exhausting (without guarantee of success). The Android system generally speaking (depending on the provider) blocks long running processes and long running TCP connections. If you are not dependent on Termux, do not bother with all this.
@@ -176,7 +178,7 @@ To display local time in logs (instead of UTC), set the `TZ` environment variabl
 getprop persist.sys.timezone
 
 # Run with TZ set
-TZ=Europe/Athens mqtt-tunnel -c config.json
+TZ=Europe/Athens mqtt-tunnel -c termux-server.json
 
 # Or make it permanent
 export TZ=Europe/Athens

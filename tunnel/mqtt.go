@@ -100,11 +100,10 @@ type mqttBroker struct {
 	ackWaiting      *map[string]*Tunnel
 	pendingConfirms *map[string]*Tunnel
 
-	// Manual ping/echo fields (server mode only)
-	pingTopic            string        // baseTopic/ping
+	// Manual ping/echo fields
+	pingTopic            string        // baseTopic/ping/{random4} - unique per instance
 	lastActivityTime     time.Time     // last time any packet was received
 	pingPending          bool          // true if waiting for ping response
-	expectedPingResponse string        // expected ping echo payload
 	pingTimer            *time.Timer   // timer for next ping
 	pingTimeoutTimer     *time.Timer   // timer for ping response timeout
 	mu                   sync.Mutex    // protects ping fields
@@ -136,9 +135,11 @@ func NewMQTTBroker(conf Config, controlCh chan controlPacket, isServerMode bool,
 		lastActivityTime: time.Now(),
 	}
 
-	// Setup ping topic for server mode
-	if isServerMode && conf.ManualKeepalive > 0 {
-		ret.pingTopic = conf.Topic + "/ping"
+	// Setup unique ping topic when manual keepalive is enabled
+	// Each instance gets its own subtopic to avoid cross-traffic
+	if conf.ManualKeepalive > 0 {
+		pingSubtopic := GenerateRandomID(4)
+		ret.pingTopic = conf.Topic + "/ping/" + pingSubtopic
 	}
 
 	opts, err := getMQTTOptions(conf, clientID)
@@ -446,8 +447,8 @@ func (mqb *mqttBroker) onConnect(client mqtt.Client) {
 		log.Printf("[ERROR] subscribe failed error=%v", err)
 	}
 
-	// Start manual ping timer for server mode
-	if mqb.isServerMode && mqb.conf.ManualKeepalive > 0 {
+	// Start manual ping timer when enabled (works for both server and client modes)
+	if mqb.conf.ManualKeepalive > 0 {
 		// Reset activity time to now (connection time) to start the timer fresh
 		mqb.mu.Lock()
 		mqb.lastActivityTime = time.Now()
@@ -610,7 +611,7 @@ func (mqb *mqttBroker) updateActivity() {
 
 // startPingTimer starts/restarts the ping timer
 func (mqb *mqttBroker) startPingTimer() {
-	if mqb.conf.ManualKeepalive <= 0 || !mqb.isServerMode {
+	if mqb.conf.ManualKeepalive <= 0 {
 		return
 	}
 
@@ -640,18 +641,11 @@ func (mqb *mqttBroker) sendPing() {
 	mqb.pingPending = true
 	mqb.mu.Unlock()
 
-	// Generate random ping payload
-	pingPayload := GenerateRandomID(8)
+	debugf("sending manual ping to %s", mqb.pingTopic)
 
-	debugf("sending manual ping: %s", pingPayload)
-
-	// Store expected response
-	mqb.mu.Lock()
-	mqb.expectedPingResponse = pingPayload
-	mqb.mu.Unlock()
-
-	// Publish ping
-	token := mqb.client.Publish(mqb.pingTopic, 0, false, pingPayload)
+	// Publish static "ping" payload
+	// Using unique topic per instance, so any "ping" response is valid
+	token := mqb.client.Publish(mqb.pingTopic, 0, false, "ping")
 	token.Wait()
 
 	// Start timeout timer (5 seconds)
@@ -684,8 +678,9 @@ func (mqb *mqttBroker) handlePingMessage(payload []byte) {
 
 	if mqb.pingPending {
 		// This is a response to our ping
-		if string(payload) == mqb.expectedPingResponse {
-			debugf("manual ping echo received: %s", payload)
+		// Any "ping" response is valid since we use unique topics per instance
+		if string(payload) == "ping" {
+			debugf("manual ping echo received from %s", mqb.pingTopic)
 			mqb.pingPending = false
 			if mqb.pingTimeoutTimer != nil {
 				mqb.pingTimeoutTimer.Stop()
@@ -693,11 +688,11 @@ func (mqb *mqttBroker) handlePingMessage(payload []byte) {
 			// Restart ping timer
 			go mqb.startPingTimer()
 		} else {
-			log.Printf("[WARN] manual ping echo mismatch: expected %s, got %s",
-				mqb.expectedPingResponse, payload)
+			// Invalid payload - should be "ping"
+			debugf("manual ping echo with unexpected payload from %s: %s", mqb.pingTopic, payload)
 		}
 	} else {
-		// Unexpected ping message, log it
-		debugf("unexpected ping message: %s", payload)
+		// Stale ping response (arrived after timeout) - just log it
+		debugf("stale ping response from %s: %s", mqb.pingTopic, payload)
 	}
 }

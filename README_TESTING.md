@@ -54,10 +54,21 @@ mosquitto_sub -t "ssh/#" -v
 
 ### Terminal 3: mqtt-tunnel Server
 
+Create `test-server.json`:
+```json
+{
+    "broker": "mqtt://localhost:1883",
+    "topic": "ssh",
+    "server": ":7022",
+    "debug": true,
+    "log-file": "/dev/tty"
+}
+```
+
 Run the mqtt-tunnel server component (the "remote" side):
 
 ```bash
-./mqtt-tunnel -broker mqtt://localhost -topic "ssh" -server :7022 -verbose
+./mqtt-tunnel -c test-server.json
 ```
 
 **What it does:**
@@ -68,10 +79,20 @@ Run the mqtt-tunnel server component (the "remote" side):
 
 ### Terminal 4: mqtt-tunnel Client
 
+Create `test-client.json`:
+```json
+{
+    "broker": "mqtt://localhost:1883",
+    "topic": "ssh",
+    "debug": true,
+    "log-file": "/dev/tty"
+}
+```
+
 Run the mqtt-tunnel client component:
 
 ```bash
-./mqtt-tunnel -broker mqtt://localhost -topic "ssh" -verbose
+./mqtt-tunnel -c test-client.json
 ```
 
 **What it does:**
@@ -110,7 +131,7 @@ Once all 4 terminals are running:
 In Terminal 4, pipe data through:
 
 ```bash
-echo "test message" | ./mqtt-tunnel -broker mqtt://localhost -topic "ssh" -verbose
+echo "test message" | ./mqtt-tunnel -c test-client.json
 ```
 
 ### Using netcat as alternative to socat
@@ -143,9 +164,9 @@ mosquitto -v
 # Kill processes using port 7022
 fuser -k 7022/tcp
 
-# Or use a different port
+# Or use a different port (update test-server.json to use ":7023")
 socat -T 60 TCP-LISTEN:7023,fork ...
-./mqtt-tunnel -broker mqtt://localhost -topic "ssh" -server :7023 -verbose
+./mqtt-tunnel -c test-server.json
 ```
 
 ### MQTT connection refused
@@ -213,42 +234,42 @@ The server supports multiple concurrent connections. Open additional Terminal 4 
 
 ```bash
 # Terminal 4a
-./mqtt-tunnel -broker mqtt://localhost -topic "ssh" -verbose
+./mqtt-tunnel -c test-client.json
 
 # Terminal 4b (in another window)
-./mqtt-tunnel -broker mqtt://localhost -topic "ssh" -verbose
+./mqtt-tunnel -c test-client.json
 ```
 
 ### Using configuration files
 
-Instead of command-line flags, use config files:
+The `-c` flag is required to specify the config file:
 
-**server.json:**
+**test-server.json:**
 ```json
 {
-    "broker": "mqtt://localhost",
+    "broker": "mqtt://localhost:1883",
     "topic": "ssh",
     "server": ":7022",
-    "verbose": true
+    "debug": true
 }
 ```
 
-**client.json:**
+**test-client.json:**
 ```json
 {
-    "broker": "mqtt://localhost",
+    "broker": "mqtt://localhost:1883",
     "topic": "ssh",
-    "verbose": true
+    "debug": true
 }
 ```
 
 Then run:
 ```bash
 # Terminal 3
-./mqtt-tunnel -c server.json
+./mqtt-tunnel -c test-server.json
 
 # Terminal 4
-./mqtt-tunnel -c client.json
+./mqtt-tunnel -c test-client.json
 ```
 
 ### Testing with actual SSH protocol
@@ -260,7 +281,7 @@ Replace the socat "SSH server" with a real OpenSSH server on a non-standard port
 sudo /usr/sbin/sshd -p 7022 -D
 
 # Terminal 4 - Connect via mqtt-tunnel
-./mqtt-tunnel -broker mqtt://localhost -topic "ssh" | head -1
+./mqtt-tunnel -c test-client.json | head -1
 
 # You should see the SSH banner:
 # SSH-2.0-OpenSSH_8.9p1 Ubuntu-3ubuntu0.10

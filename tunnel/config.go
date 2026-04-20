@@ -59,6 +59,128 @@ type Config struct {
 	ManualKeepalive int `json:"manual-keepalive"`
 }
 
+// stripJSONComments removes JSONC-style comments (// and /* */) from JSON data.
+// It preserves comments inside string literals.
+func stripJSONComments(data []byte) []byte {
+	var result []byte
+	inString := false
+	escapeNext := false
+
+	for i := 0; i < len(data); i++ {
+		b := data[i]
+
+		// Handle string escaping
+		if escapeNext {
+			result = append(result, b)
+			escapeNext = false
+			continue
+		}
+
+		if b == '\\' && inString {
+			result = append(result, b)
+			escapeNext = true
+			continue
+		}
+
+		// Handle string boundaries
+		if b == '"' && !inString {
+			inString = true
+			result = append(result, b)
+			continue
+		}
+		if b == '"' && inString {
+			inString = false
+			result = append(result, b)
+			continue
+		}
+
+		// Inside strings, preserve everything
+		if inString {
+			result = append(result, b)
+			continue
+		}
+
+		// Check for single-line comment //
+		if b == '/' && i+1 < len(data) && data[i+1] == '/' {
+			// Skip to end of line
+			for i < len(data) && data[i] != '\n' {
+				i++
+			}
+			// Keep the newline for line number preservation
+			if i < len(data) {
+				result = append(result, '\n')
+			}
+			continue
+		}
+
+		// Check for multi-line comment /* */
+		if b == '/' && i+1 < len(data) && data[i+1] == '*' {
+			// Skip to */
+			i += 2
+			for i < len(data)-1 && !(data[i] == '*' && data[i+1] == '/') {
+				i++
+			}
+			i++ // Skip the closing /
+			continue
+		}
+
+		result = append(result, b)
+	}
+
+	return result
+}
+
+// fixJSONCommas fixes missing commas between properties and trailing commas.
+// It returns the fixed JSON and a list of warning messages.
+// Designed for simple flat configs (no nested objects/arrays).
+func fixJSONCommas(data []byte) ([]byte, []string) {
+	var warnings []string
+	lines := strings.Split(string(data), "\n")
+	
+	// Find all property line indices (lines with "key": value)
+	var propertyLines []int
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		// Skip empty lines, comments (already stripped but check anyway), and closing brace
+		if trimmed == "" || trimmed == "}" || strings.HasPrefix(trimmed, "//") || strings.HasPrefix(trimmed, "/*") {
+			continue
+		}
+		// Check if line looks like a property: "key": ...
+		if strings.HasPrefix(trimmed, "\"") && strings.Contains(trimmed, "\":") {
+			propertyLines = append(propertyLines, i)
+		}
+	}
+	
+	if len(propertyLines) == 0 {
+		return data, warnings
+	}
+	
+	// Process each property line
+	for idx, lineIdx := range propertyLines {
+		line := lines[lineIdx]
+		trimmed := strings.TrimSpace(line)
+		isLastProperty := idx == len(propertyLines)-1
+		
+		if isLastProperty {
+			// Last property: should NOT have trailing comma
+			if strings.HasSuffix(trimmed, ",") {
+				// Remove trailing comma
+				lines[lineIdx] = line[:len(line)-1]
+				warnings = append(warnings, fmt.Sprintf("Config file has trailing comma at line %d. Removing it. Valid JSON does not allow trailing commas.", lineIdx+1))
+			}
+		} else {
+			// Not last property: should have trailing comma
+			if !strings.HasSuffix(trimmed, ",") {
+				// Add trailing comma
+				lines[lineIdx] = line + ","
+				warnings = append(warnings, fmt.Sprintf("Config file missing comma at line %d. Adding comma. Valid JSON requires commas between properties.", lineIdx+1))
+			}
+		}
+	}
+	
+	return []byte(strings.Join(lines, "\n")), warnings
+}
+
 func ReadConfig(filePath string) (Config, error) {
 	var ret Config
 
@@ -67,9 +189,15 @@ func ReadConfig(filePath string) (Config, error) {
 		return ret, fmt.Errorf("read config error, %w", err)
 	}
 
+	// Strip JSONC-style comments (// and /* */) before parsing
+	cleanBuf := stripJSONComments(buf)
+	
+	// Fix missing/trailing commas and collect warnings
+	cleanBuf, commaWarnings := fixJSONCommas(cleanBuf)
+
 	// First, unmarshal into a map to check for unknown keys
 	var rawConfig map[string]interface{}
-	if err := json.Unmarshal(buf, &rawConfig); err != nil {
+	if err := json.Unmarshal(cleanBuf, &rawConfig); err != nil {
 		return ret, fmt.Errorf("invalid JSON: %w", err)
 	}
 
@@ -100,8 +228,13 @@ func ReadConfig(filePath string) (Config, error) {
 		}
 	}
 
-	if err := json.Unmarshal(buf, &ret); err != nil {
+	if err := json.Unmarshal(cleanBuf, &ret); err != nil {
 		return ret, fmt.Errorf("read config marshal error: %w", err)
+	}
+	
+	// Print any comma-fix warnings
+	for _, warning := range commaWarnings {
+		fmt.Fprintf(os.Stderr, "[WARN] %s\n", warning)
 	}
 
 	// Combine debug and verbose fields (verbose is deprecated alias for debug)

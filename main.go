@@ -1,3 +1,17 @@
+// Copyright 2026 Panagiotis Karagiannis
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package main
 
 import (
@@ -9,65 +23,36 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"time"
 
 	"mqtt-tunnel/tunnel"
 )
 
+// Version and gitHash are defined in version.go
+
 // fileExists checks if a file exists
-func fileExists(path string) bool {
-	_, err := os.Stat(path)
+func fileExists(filename string) bool {
+	_, err := os.Stat(filename)
 	return err == nil
 }
 
-// getDefaultConfigPath returns the default config file path.
-// Looks for default.json first, then config.json for backward compatibility.
-// Returns empty string if home directory cannot be determined or no config found.
-func getDefaultConfigPath() string {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return ""
-	}
-
-	configDir := filepath.Join(home, ".config", "mqtt-tunnel")
-
-	// Try default.json first
-	defaultPath := filepath.Join(configDir, "default.json")
-	if fileExists(defaultPath) {
-		return defaultPath
-	}
-
-	// Fall back to config.json for backward compatibility
-	configPath := filepath.Join(configDir, "config.json")
-	if fileExists(configPath) {
-		return configPath
-	}
-
-	return ""
-}
-
 // resolveConfigPath resolves a config file path.
-// If the path contains no directory separator, it first checks in
-// ~/.config/mqtt-tunnel/, then falls back to current directory.
-// Returns the resolved path.
+// If the path contains no directory separator, it looks in ~/.config/mqtt-tunnel/.
+// Use ./filename to reference the current directory explicitly.
 func resolveConfigPath(filename string) string {
 	// If path contains / or \ (Windows), use as-is
 	if strings.ContainsAny(filename, "/\\") {
 		return filename
 	}
 
-	// Try ~/.config/mqtt-tunnel/ first
+	// Look in ~/.config/mqtt-tunnel/
 	home, err := os.UserHomeDir()
 	if err == nil {
-		configDirPath := filepath.Join(home, ".config", "mqtt-tunnel", filename)
-		if fileExists(configDirPath) {
-			return configDirPath
-		}
+		return filepath.Join(home, ".config", "mqtt-tunnel", filename)
 	}
 
-	// Fall back to current directory
+	// Fallback to original filename if we can't get home dir
 	return filename
 }
 
@@ -77,13 +62,9 @@ type crlfWriter struct {
 }
 
 func (cw *crlfWriter) Write(p []byte) (n int, err error) {
-	// Convert \n to \r\n, but avoid double \r\r\n
-	// Simple approach: replace all \n with \r\n
-	// This is not the most efficient but works for log output
 	modified := make([]byte, 0, len(p)+bytes.Count(p, []byte{'\n'}))
 	for i, b := range p {
 		if b == '\n' {
-			// Check if previous char was \r (to avoid \r\r\n)
 			if i == 0 || p[i-1] != '\r' {
 				modified = append(modified, '\r')
 			}
@@ -104,74 +85,46 @@ func setupLog(verbose bool, logFile string, logFileSize int, isLocal bool, print
 
 	var output io.Writer
 	if logFile != "" {
-		// Check if it's a regular file (not /dev/tty, /dev/null, etc.)
 		fi, err := os.Stat(logFile)
 		isRegularFile := err == nil && fi.Mode().IsRegular()
 
-		// Determine max size
 		maxSize := logFileSize
 		if maxSize == 0 {
 			maxSize = defaultLogFileSize
 		} else if !isRegularFile {
-			// log-file-size explicitly set but log-file is a special file
 			fmt.Fprintf(os.Stderr, "[INFO] log-file '%s' is a special file, log-file-size setting ignored\n", logFile)
 			maxSize = defaultLogFileSize
 		}
 
 		if maxSize <= 0 {
-			// Discard mode - discard all log output
 			output = io.Discard
 		} else if isRegularFile && fi.Size() >= int64(2*maxSize) {
-			// File too large, truncate to last maxSize bytes at line boundary
 			content, err := os.ReadFile(logFile)
 			if err == nil && len(content) > maxSize {
-				// Find start of last maxSize bytes
 				start := len(content) - maxSize
-				// Find first newline after start (to avoid cutting a line)
 				for start < len(content) && content[start] != '\n' {
 					start++
 				}
 				if start < len(content) {
-					// Write from start+1 (after newline) to end
 					os.WriteFile(logFile, content[start+1:], 0666)
 				}
 			}
-			// Open for append
 			f, err := os.OpenFile(logFile, os.O_WRONLY|os.O_APPEND, 0666)
 			if err != nil {
 				log.Fatalf("Failed to open log file: %v", err)
 			}
 			output = f
 		} else {
-			// Normal append mode
 			f, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 			if err != nil {
 				log.Fatalf("Failed to open log file: %v", err)
 			}
-
-			// Check if file is a regular file with existing contents (follows symlinks)
-			if realFi, err := os.Stat(logFile); err == nil && realFi.Mode().IsRegular() && realFi.Size() > 0 {
-				f.WriteString("\n ######## log starting ############\n")
-			}
-
 			output = f
 		}
-	} else if isLocal && runtime.GOOS != "windows" {
-		// Client mode on Unix: use /dev/tty for visibility
-		// This ensures logs are visible even when stderr is redirected by SSH
-		tty, err := os.OpenFile("/dev/tty", os.O_WRONLY, 0)
-		if err == nil {
-			output = tty
-		} else {
-			// Fallback to stderr if /dev/tty is not available
-			output = os.Stderr
-		}
 	} else {
-		// Default: stderr
 		output = os.Stderr
 	}
 
-	// In local mode, wrap with CRLF converter for raw terminal mode
 	if isLocal {
 		output = &crlfWriter{w: output}
 	}
@@ -186,12 +139,6 @@ func setupLog(verbose bool, logFile string, logFileSize int, isLocal bool, print
 
 // expandServerAddr expands a server address shorthand.
 // If the address starts with ":", "127.0.0.1" is prepended.
-// Examples:
-//
-//	":22" -> "127.0.0.1:22"
-//	":8022" -> "127.0.0.1:8022"
-//	"localhost:22" -> "localhost:22"
-//	"192.168.1.1:22" -> "192.168.1.1:22"
 func expandServerAddr(addr string) string {
 	if len(addr) > 0 && addr[0] == ':' {
 		return "127.0.0.1" + addr
@@ -200,7 +147,7 @@ func expandServerAddr(addr string) string {
 }
 
 func printUsage() {
-	fmt.Fprintf(os.Stderr, "Usage: %s [options]\n\n", os.Args[0])
+	fmt.Fprintf(os.Stderr, "Usage: %s -c <config.json> [options]\n\n", os.Args[0])
 	fmt.Fprintf(os.Stderr, "SSH proxy via MQTT\n")
 	fmt.Fprintf(os.Stderr, "Version: %s", Version)
 	if gitHash != "" {
@@ -214,10 +161,11 @@ func printUsage() {
 	fmt.Fprintf(os.Stderr, "Options:\n")
 	flag.PrintDefaults()
 	fmt.Fprintf(os.Stderr, "\nExamples:\n")
-	fmt.Fprintf(os.Stderr, "  %s -topic generate (generate a secure random topic)\n", os.Args[0])
-	fmt.Fprintf(os.Stderr, "  %s -broker mqtt://localhost:1883 -topic device/1/control\n", os.Args[0])
-	fmt.Fprintf(os.Stderr, "  %s -config config.json -server :22\n", os.Args[0])
-	fmt.Fprintf(os.Stderr, "  %s -config help (print sample config)\n", os.Args[0])
+	fmt.Fprintf(os.Stderr, "  %s -c server.json             (run in server mode)\n", os.Args[0])
+	fmt.Fprintf(os.Stderr, "  %s -c client-to-home.json     (run in client mode)\n", os.Args[0])
+	fmt.Fprintf(os.Stderr, "  %s -c ~/configs/office.json   (config with full path)\n", os.Args[0])
+	fmt.Fprintf(os.Stderr, "  %s -generate                  (generate a secure random topic)\n", os.Args[0])
+	fmt.Fprintf(os.Stderr, "  %s -c help                    (print sample config)\n", os.Args[0])
 }
 
 func printSampleConfig() {
@@ -229,258 +177,202 @@ func printSampleConfig() {
     "ca-cert": "",
     "client-cert": "",
     "private-key": "",
-    "server": ":22",  // absence of this line implies client mode
+    "server": ":22",
     "log-file": "",
-    "log-file-size": 50000,  // Max log file size in bytes (default 50000). 0=default, negative=discard
+    "log-file-size": 50000,
     "debug": false,
     "print-lines": false,
     "connection-timeout": 15,
     "mqtt-keepalive": 60,
-    "manual-keepalive": 0  // Server only: send manual ping after N seconds of inactivity (0=disabled)
+    "manual-keepalive": 0
 }
 
 Required fields:
-  - broker: MQTT broker URL
-  - topic:  Control topic (generate with: mqtt-tunnel -topic generate)
+  - broker: MQTT broker URL (e.g., mqtt://host:1883, mqtts://host:8883)
+  - topic:  Control topic (generate with: mqtt-tunnel -generate)
 
-Defaults:
-  - connection-timeout: 15 seconds (tunnel establishment timeout)
-  - mqtt-keepalive: 60 seconds (MQTT ping interval, 0 or negative to disable)
+Mode selection:
+  - server: Target address (e.g., "127.0.0.1:22" or ":22"). 
+            If present, runs in server mode. If absent, runs in client mode.
+
+Keepalive options:
+  - mqtt-keepalive:    MQTT ping interval in seconds (default: 60 for server, disabled for client)
+                       Set to 0 or >=3600 to disable.
+  - manual-keepalive:  Manual ping interval in seconds (0=disabled, default: 60 on Termux server)
+                       Each instance uses a unique subtopic to avoid cross-traffic.
 
 Path expansion:
-  Path fields (ca-cert, client-cert, private-key, log-file) support ~ and $HOME expansion.
-  Example: "log-file": "~/.config/mqtt-tunnel/mqtt-tunnel.log"`)
+  Path fields (ca-cert, client-cert, private-key, log-file) support ~ and $HOME expansion.`)
 }
 
 func main() {
-	// termux or pc
 	initPlatform()
-	//
+
 	var (
-		configFile         = flag.String("c", "", "alias for -config")
-		configFileFull     = flag.String("config", "", "config file path (use it to hide secrets from command line; use -config help to print a sample config)")
-		verbose            = flag.Bool("verbose", false, "")
-		debug              = flag.Bool("debug", false, "enable debug logging")
-		debugPaho          = flag.Bool("debug-paho", false, "enable Paho MQTT library debug logging (very noisy)")
-		printLines         = flag.Bool("print-lines", false, "include file and line number in log messages")
-		logFile            = flag.String("log-file", "", "log file path")
-		broker             = flag.String("broker", "", "MQTT broker URL (e.g., mqtt://host:port, mqtts://host:port, ws://host:port, wss://host:port). Default ports: mqtt=1883, mqtts=8883, ws=80, wss=443)")
-		username           = flag.String("username", "", "MQTT username value")
-		password           = flag.String("password", "", "MQTT password value")
-		caCert             = flag.String("ca-cert", "", "CA certificate path")
-		clientCert         = flag.String("client-cert", "", "client certificate path")
-		privateKey         = flag.String("private-key", "", "private key path")
-		topic              = flag.String("topic", "", "control topic value (use 'generate' to create a secure random topic)")
-		server             = flag.String("server", "", "Enables server mode. The address (usually 127.0.0.1:22) is the address of the target service (most probably SSH) as viewed by the server mqtt-tunnel process. Absence of this option implies client mode.")
-		connectionTimeout  = flag.Int("connection-timeout", 15, "connection timeout in seconds")
-		mqttKeepalive      = flag.Int("mqtt-keepalive", 0, "MQTT keepalive interval in seconds. 0 or 3600+ disables Paho keepalive. Default: 60s (PC server), 3600s (client/Termux)")
-		manualKeepalive = flag.Int("manual-keepalive", 0, "Manual ping interval in seconds (server mode only, 0=disabled). Sends PING to baseTopic/ping and expects echo response within 5s.")
+		configFile     = flag.String("c", "", "config file path (required, use 'help' for sample)")
+		configFileFull = flag.String("config", "", "config file path (alias for -c)")
+		generate       = flag.Bool("generate", false, "generate a secure random topic and exit")
 	)
 
 	flag.Usage = printUsage
 	flag.Parse()
 
-	// Check if user wants to print sample config
-	// Use -config or -c, with -config taking precedence
+	// Handle -generate
+	if *generate {
+		fmt.Println(tunnel.GenerateRandomID(10))
+		os.Exit(0)
+	}
+
+	// Determine effective config file path
 	effectiveConfigFile := *configFileFull
 	if effectiveConfigFile == "" {
 		effectiveConfigFile = *configFile
 	}
 
-	// If no config file specified, try the default config file
-	if effectiveConfigFile == "" {
-		effectiveConfigFile = getDefaultConfigPath()
-	} else {
-		// Resolve config file path (handles bare filenames)
-		effectiveConfigFile = resolveConfigPath(effectiveConfigFile)
-	}
-
+	// Handle -config help (special case)
 	if effectiveConfigFile == "help" {
 		printSampleConfig()
 		os.Exit(0)
 	}
 
-	// Check if user wants to generate a topic
-	if *topic == "generate" {
-		// Generate 10-char topic (alphanumeric, higher entropy than hex)
-		fmt.Println(tunnel.GenerateRandomID(10))
-		os.Exit(0)
-	}
-
-	// Show help if no options are provided AND no default config exists
-	if flag.NFlag() == 0 && effectiveConfigFile == "" {
+	// Require -c/-config flag
+	if effectiveConfigFile == "" {
 		printUsage()
-		os.Exit(0)
+		fmt.Fprintf(os.Stderr, "\nError: -c flag is required (config file path)\n")
+		fmt.Fprintf(os.Stderr, "\nExamples:\n")
+		fmt.Fprintf(os.Stderr, "  %s -c server.json\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "  %s -c client-to-home.json\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "  %s -c ~/.config/mqtt-tunnel/office.json\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "\nUse '%s -config help' to print a sample config.\n", os.Args[0])
+		os.Exit(1)
 	}
 
-	// Note: setupLog is called later after we determine the mode
+	// Resolve config file path
+	effectiveConfigFile = resolveConfigPath(effectiveConfigFile)
 
-	// Try to read config file if specified
-	var conf tunnel.Config
-	var err error
-	if effectiveConfigFile != "" {
-		conf, err = tunnel.ReadConfig(effectiveConfigFile)
-		if err != nil {
-			// Provide helpful error message for bare filenames
-			if !strings.ContainsAny(effectiveConfigFile, "/\\") {
-				home, _ := os.UserHomeDir()
-				fmt.Fprintf(os.Stderr, "Error: config file not found: %s\n", effectiveConfigFile)
-				fmt.Fprintf(os.Stderr, "Looked in:\n")
-				fmt.Fprintf(os.Stderr, "  - %s\n", filepath.Join(home, ".config", "mqtt-tunnel", effectiveConfigFile))
-				fmt.Fprintf(os.Stderr, "  - ./%s\n", effectiveConfigFile)
-			} else {
-				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+	// Read config file
+	conf, err := tunnel.ReadConfig(effectiveConfigFile)
+	if err != nil {
+		// Check if this is a bare filename (no path separators)
+		isBareFilename := !strings.ContainsAny(*configFile, "/\\") && *configFile != ""
+		isBareFilenameFull := !strings.ContainsAny(*configFileFull, "/\\") && *configFileFull != ""
+		
+		if isBareFilename || isBareFilenameFull {
+			// User provided a bare filename
+			bareName := *configFile
+			if bareName == "" {
+				bareName = *configFileFull
 			}
+			home, _ := os.UserHomeDir()
+			lookedIn := filepath.Join(home, ".config", "mqtt-tunnel", bareName)
+			
+			fmt.Fprintf(os.Stderr, "Error: config file not found: %s\n", bareName)
+			fmt.Fprintf(os.Stderr, "Looked in: %s\n", lookedIn)
+			
+			// Check if file exists in current directory
+			if fileExists(bareName) {
+				fmt.Fprintf(os.Stderr, "\nFound ./%s in current directory.\n", bareName)
+				fmt.Fprintf(os.Stderr, "Use -c ./%s to use the file in current directory.\n", bareName)
+			} else {
+				fmt.Fprintf(os.Stderr, "\nUse -c ./%s to use a file in the current directory.\n", bareName)
+			}
+		} else {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		}
+		os.Exit(1)
+	}
+
+	// Server mode: acquire exclusive lock on config file to prevent multiple instances
+	if conf.ServerAddr != "" {
+		_, err := acquireServerLock(effectiveConfigFile)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
+		// Lock is held until process exits (including crash/SIGKILL - kernel cleans up on Unix)
 	}
 
-	// Override config with command-line options if specified
-	if *broker != "" {
-		conf.BrokerURL = *broker
+	// Apply defaults for missing config values
+	if conf.ConnectionTimeout <= 0 {
+		conf.ConnectionTimeout = 15 // Default 15 seconds
 	}
 
-	// Validate broker URL format
+	// Validate broker URL
 	_, err = tunnel.ParseBrokerURL(conf.BrokerURL)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: invalid broker URL: %v\n", err)
 		os.Exit(1)
 	}
-	if *username != "" {
-		conf.Username = *username
-	}
-	if *password != "" {
-		conf.Password = *password
-	}
-	if *caCert != "" {
-		conf.CaCert = *caCert
-	}
-	if *clientCert != "" {
-		conf.ClientCert = *clientCert
-	}
-	if *privateKey != "" {
-		conf.PrivateKey = *privateKey
-	}
-	if *topic != "" {
-		conf.Topic = *topic
-	}
-
-	// Validate required config
 	if conf.BrokerURL == "" {
-		fmt.Fprintf(os.Stderr, "Error: MQTT broker URL is required (specify with -broker or in config file)\n")
-		os.Exit(1)
-	}
-	if conf.Topic == "" {
-		fmt.Fprintf(os.Stderr, "Error: control topic is required (specify with -topic or in config file)\n")
+		fmt.Fprintf(os.Stderr, "Error: MQTT broker URL is required in config file\n")
 		os.Exit(1)
 	}
 
-	// Validate topic format
+	// Validate topic
+	if conf.Topic == "" {
+		fmt.Fprintf(os.Stderr, "Error: control topic is required in config file\n")
+		os.Exit(1)
+	}
 	if err := tunnel.ValidateTopic(conf.Topic); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: invalid topic: %v\n", err)
 		os.Exit(1)
 	}
 
-	// Check for blacklisted example topics from documentation
+	// Check for blacklisted example topics
 	if conf.Topic == "gFAftaCLyD" || conf.Topic == "gFAftaCL" {
-		fmt.Fprintf(os.Stderr, "Error: topic '%s' is an example from the current or previous README and may be used by other users\n", conf.Topic)
-		fmt.Fprintf(os.Stderr, "Please generate your own unique topic with: mqtt-tunnel -topic generate\n")
+		fmt.Fprintf(os.Stderr, "Error: topic '%s' is an example from documentation and may be used by other users\n", conf.Topic)
+		fmt.Fprintf(os.Stderr, "Generate your own topic with: mqtt-tunnel -generate\n")
 		os.Exit(1)
 	}
 
-	// For server mode, store the server address in config (command line overrides config)
-	if *server != "" {
-		conf.ServerAddr = expandServerAddr(*server)
-	} else if conf.ServerAddr != "" {
+	// Expand server address if present
+	if conf.ServerAddr != "" {
 		conf.ServerAddr = expandServerAddr(conf.ServerAddr)
 	}
 
-	// Set connection timeout from command line
-	conf.ConnectionTimeout = *connectionTimeout
-
-	// Track if user explicitly set keepalive values
-	userSetMqttKeepalive := *mqttKeepalive > 0 || conf.MqttKeepalive > 0
-	userSetManualKeepalive := *manualKeepalive > 0 || conf.ManualKeepalive > 0
-
-	// Set MQTT keepalive from command line
-	if *mqttKeepalive > 0 {
-		conf.MqttKeepalive = *mqttKeepalive
-	}
-
-	// Set manual ping interval from command line
-	if *manualKeepalive > 0 {
-		conf.ManualKeepalive = *manualKeepalive
-	}
-
-	// Determine mode: server mode if ServerAddr is set, otherwise client mode
+	// Determine mode
 	isServerMode := conf.ServerAddr != ""
 
-	// Apply keepalive defaults and logic
+	// Apply keepalive defaults
 	if isServerMode {
-		// Server mode
+		// Server mode defaults
 		if conf.ManualKeepalive > 0 {
-			// Manual keepalive is set - disable Paho keepalive
-			if userSetMqttKeepalive {
+			// Manual keepalive enabled - disable Paho
+			if conf.MqttKeepalive > 0 && conf.MqttKeepalive < 3600 {
 				log.Printf("[WARN] both manual-keepalive and mqtt-keepalive are set, mqtt-keepalive ignored")
 			}
-			conf.MqttKeepalive = 3600 // Effectively disable Paho keepalive
-		} else if userSetMqttKeepalive {
-			// Only mqtt-keepalive is set
-			if conf.MqttKeepalive == 0 {
-				conf.MqttKeepalive = 3600 // 0 means disabled
-			}
+			conf.MqttKeepalive = 3600
+		} else if conf.MqttKeepalive > 0 && conf.MqttKeepalive < 3600 {
+			// Paho keepalive enabled
 			conf.ManualKeepalive = 0
 		} else {
-			// Nothing set - apply platform defaults
+			// Neither set - apply platform defaults
 			conf.ManualKeepalive = getDefaultManualKeepalive()
 			if conf.ManualKeepalive > 0 {
-				// Termux: manual-keepalive default, disable Paho
 				conf.MqttKeepalive = 3600
 			} else {
-				// Other platforms: Paho keepalive default
 				conf.MqttKeepalive = 60
 			}
 		}
 	} else {
-		// Client mode - default to disabled unless explicitly set
-		if !userSetMqttKeepalive && !userSetManualKeepalive {
-			conf.MqttKeepalive = 3600 // Effectively disabled
+		// Client mode - default to disabled
+		if conf.MqttKeepalive == 0 || conf.MqttKeepalive >= 3600 {
+			conf.MqttKeepalive = 3600 // Disabled
+		}
+		if conf.ManualKeepalive < 0 {
 			conf.ManualKeepalive = 0
-		} else {
-			// User set at least one - use their values
-			if conf.MqttKeepalive == 0 && userSetMqttKeepalive {
-				conf.MqttKeepalive = 3600 // 0 means disabled
-			}
-			if !userSetMqttKeepalive {
-				conf.MqttKeepalive = 3600 // Default if not set
-			}
 		}
 	}
 
-	// Use log file from config if not provided on command line
-	effectiveLogFile := *logFile
-	if effectiveLogFile == "" {
-		effectiveLogFile = conf.LogFile
-	}
+	// Setup logging
+	logOutput := setupLog(conf.Debug, conf.LogFile, conf.LogFileSize, !isServerMode, conf.PrintLines)
 
-	// Use log file size from config
-	effectiveLogFileSize := conf.LogFileSize
-
-	// Use debug from config if not provided on command line
-	effectiveVerbose := *verbose || *debug || conf.Debug
-
-	// Use print-lines from config if not provided on command line
-	effectivePrintLines := *printLines || conf.PrintLines
-
-	// Setup logging (client mode needs CRLF conversion)
-	logOutput := setupLog(effectiveVerbose, effectiveLogFile, effectiveLogFileSize, !isServerMode, effectivePrintLines)
-
-	// Enable Paho debug logging if requested
-	if *debugPaho {
+	// Enable Paho debug if requested
+	if conf.Debug {
 		tunnel.SetDebugPahoLogging(true)
 	}
 
-	// Log the mode of operation
+	// Log startup info
 	if isServerMode {
 		log.Printf("[INFO] Server mode")
 		log.Printf("[INFO]   app-version=%s", Version)
@@ -512,6 +404,7 @@ func main() {
 		log.Printf("[INFO] manual-keepalive disabled")
 	}
 
+	// Create tunnel
 	mqt, err := tunnel.NewMQTunnel(conf, isServerMode, logOutput)
 	if err != nil {
 		log.Fatal(err)
@@ -519,13 +412,12 @@ func main() {
 
 	ctx := context.Background()
 
-	// Setup config file hot reload for server mode only
-	if isServerMode && effectiveConfigFile != "" {
+	// Setup config file hot reload for server mode
+	if isServerMode {
 		reloader, err := tunnel.NewConfigReloader(
 			effectiveConfigFile,
-			10*time.Second, // 10 second debounce
+			10*time.Second,
 			func() {
-				// Read and validate new config
 				newConf, err := tunnel.ReadConfig(effectiveConfigFile)
 				if err != nil {
 					log.Printf("[ERROR] Config reload failed: %v", err)
@@ -533,52 +425,24 @@ func main() {
 					return
 				}
 
-				// Apply command-line overrides to new config
-				if *broker != "" {
-					newConf.BrokerURL = *broker
-				}
-				if *username != "" {
-					newConf.Username = *username
-				}
-				if *password != "" {
-					newConf.Password = *password
-				}
-				if *caCert != "" {
-					newConf.CaCert = *caCert
-				}
-				if *clientCert != "" {
-					newConf.ClientCert = *clientCert
-				}
-				if *privateKey != "" {
-					newConf.PrivateKey = *privateKey
-				}
-				if *topic != "" {
-					newConf.Topic = *topic
-				}
-				if *server != "" {
-					newConf.ServerAddr = expandServerAddr(*server)
-				} else if newConf.ServerAddr != "" {
+				// Apply defaults for reloaded config
+				if newConf.ServerAddr != "" {
 					newConf.ServerAddr = expandServerAddr(newConf.ServerAddr)
 				}
-				newConf.ConnectionTimeout = *connectionTimeout
-				if *mqttKeepalive > 0 {
-					newConf.MqttKeepalive = *mqttKeepalive
-				}
-				if *manualKeepalive > 0 {
-					newConf.ManualKeepalive = *manualKeepalive
+				if newConf.ConnectionTimeout <= 0 {
+					newConf.ConnectionTimeout = 15
 				}
 
-				// Apply platform-specific default for manual keepalive if not set
-				// Note: reload only happens in server mode, so we always apply the default
-				if newConf.ManualKeepalive == 0 {
+				if newConf.ManualKeepalive > 0 {
+					newConf.MqttKeepalive = 3600
+				} else if newConf.MqttKeepalive <= 0 || newConf.MqttKeepalive >= 3600 {
+					newConf.MqttKeepalive = 3600
 					newConf.ManualKeepalive = getDefaultManualKeepalive()
+					if newConf.ManualKeepalive == 0 {
+						newConf.MqttKeepalive = 60
+					}
 				}
 
-				// Apply debug settings (command-line overrides config file)
-				// Note: newConf.Debug already includes newConf.Verbose (deprecated alias)
-				newConf.Debug = *verbose || *debug || newConf.Debug
-
-				// Validate required fields
 				if newConf.BrokerURL == "" {
 					log.Printf("[ERROR] Config reload failed: MQTT broker URL is required")
 					log.Printf("[INFO] Continuing with current config")
@@ -595,7 +459,6 @@ func main() {
 					return
 				}
 
-				// Trigger reload
 				mqt.ReloadConfig(newConf)
 			},
 		)
@@ -607,13 +470,12 @@ func main() {
 		}
 	}
 
+	// Run
 	if isServerMode {
-		// Server mode - wait for connections and forward to target service
 		if err := mqt.StartRemote(ctx); err != nil {
 			log.Fatal(err)
 		}
 	} else {
-		// Client mode using stdio (for SSH ProxyCommand)
 		if err := mqt.StartStdio(ctx, 0); err != nil {
 			log.Fatal(err)
 		}
