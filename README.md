@@ -295,7 +295,7 @@ The script resolves bare filenames to `~/.config/mqtt-tunnel/` (like mqtt-tunnel
 
 ---
 
-### How It Works
+### 🔍 How It Works
 
 ![connection](connection.png)
 
@@ -315,7 +315,7 @@ All negotiation is performed in the control topic (e.g., baseTopic/ctl) but the 
 
 ---
 
-### Acknowledgments
+### ⭐ Acknowledgments
 
 This project was originally inspired by [shirou/mqtunnel](https://github.com/shirou/mqtunnel). However, the two tools have diverged significantly:
 
