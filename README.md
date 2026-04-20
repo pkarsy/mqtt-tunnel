@@ -181,7 +181,7 @@ The config understands `$HOME/to/file` and `~/to/file` expansions.
 
 ---
 
-### 🔁 Connection Keepalive(MQTT underlying level, no SSH)
+### 💚 Connection Keepalive(MQTT underlying level, no SSH)
 Generally the default keepalive settings are usually working OK.
 The following options control connection keepalive on server:
 
@@ -275,24 +275,7 @@ MQTT servers can have downtime. Also the protocol may change and you could lose 
 
 ---
 
-### Connection Keepalive / Timeout Detection
-
-For fast detection of dead connections (especially useful when switching between networks), configure SSH keepalive with different values for client and server:
-
-**Client side** (fast detection):
-```
-# ~/.ssh/config
-Host remote-via-mqtt
-    ServerAliveInterval 5      # Send keepalive every 5 seconds
-    ServerAliveCountMax 3      # Disconnect after 3 missed (10s total)
-    ProxyCommand /path/to/mqtt-tunnel -c /path/to/config.json
-```
-
-Then restart sshd
-
----
-
-### Semi automatic topic change with rotate-topic
+### 🔁 Semi automatic topic change with rotate-topic
 
 The `rotate-topic` script helps rotate topics periodically for security:
 
