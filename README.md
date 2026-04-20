@@ -175,7 +175,7 @@ Generate a sample config:
 mqtt-tunnel -config help
 ```
 
-The config understands **$HOME/to/file** and "~/to/file" expansions.
+The config understands `$HOME/to/file` and `~/to/file` expansions.
 
 ---
 
