@@ -39,7 +39,7 @@ This is the simplest possible installation, without login credentials and only a
 
 you can use a substring of this but not less than 8 chars, to avoid collissions(on open brokers).
 
-#### STEP 2. 🌐 Configure the SSH server
+#### STEP 2. Configure the SSH server
 
 On the remote SSH server and using a normal account(no root), create the file
 
@@ -62,7 +62,7 @@ mqtt-tunnel -c ./server.json          # looks in Current directory only
 **Leave it running**. We will see the negotiation when the client connects. At the end we will make the server autostart.
 
 
-#### STEP 3. 🔐 Configuring the SSH client
+#### STEP 3. Configuring the SSH client
 
 Create a file `~/.config/mqtt-tunnel/client.json`
 ```json
@@ -114,22 +114,25 @@ To be able to view the daemon messages, add
 "log-file": "~/mqtt-server.log"
 ```
 
-to `server.json` . The config is reloaded automatically
+to `server.json` . The config is reloaded automatically.
 
 Also it is recommended to add theese options to sshd_config
-**Server side** (conservative, just to clean up stale sessions):
+
 ```
 # /etc/ssh/sshd_config
+# conservative, just to clean up stale sessions
 ClientAliveInterval 60         # Check every minute
 ClientAliveCountMax 3          # Disconnect after 3 minutes of silence
 ```
 
 #### STEP 5. Client log file (optional)
-By default in client mode the output is /dev/tty. Add the entry
+By default in client mode the output is `/dev/tty`. Add the entry
 
->"log-file": "~/mqtt-client.log"
+```json
+"log-file": "~/mqtt-client.log"
+```
 
-in client.json to avoid seeing the mqtt-tunnel logs during SSH logins.
+in `client.json` to avoid seeing the mqtt-tunnel logs during SSH logins.
 
 ---
 
