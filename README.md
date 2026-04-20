@@ -220,7 +220,7 @@ The following options control connection keepalive on server:
 - After the specified seconds of inactivity, sends a PING to `baseTopic/wxyz`
 - By subscribing to the same topic, expects the broker to echo the packet back within 5 seconds.
 - If no echo received, the client disconnects and reconnection is triggered.
-- Useful for Android/Termux where Doze mode interferes with standard keepalive. The problem is the Doze mode postpones the timers of the application, so a PINGRESP can be delayed(for many seconds/minutes) and the broker considers the socket dead.
+- Useful for Android/Termux where Doze mode interferes with standard keepalive. The problem is the Doze mode postpones the timers of the application, so a PINGREQ can be delayed(for many seconds/minutes) and the broker considers the socket dead.
 - **On Termux**, defaults to 60 seconds automatically. See [README_TERMUX.md](README_TERMUX.md)
 
 On client mode keepalive is disabled, the SSH tunnel can detect dead connections by itself. You can enable mqtt/manual keepalive if you wish but this is not tested at all.
