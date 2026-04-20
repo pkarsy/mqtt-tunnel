@@ -152,7 +152,7 @@ In both cases do not use topics longer than necessary (let's say up to 10 chars)
 
 ---
 
-### `💡Supported broker URL formats`
+### 💡 Supported broker URL formats
 
 | URL Scheme | Description | Default Port |
 |------------|-------------|--------------|
@@ -169,7 +169,7 @@ In both cases do not use topics longer than necessary (let's say up to 10 chars)
 
 ---
 
-### `Sample Configuration file`
+### ⚙️ Sample Configuration file
 
 Generate a sample config:
 
@@ -181,7 +181,7 @@ The config understands `$HOME/to/file` and `~/to/file` expansions.
 
 ---
 
-### `Connection Keepalive(MQTT underlying level, no SSH)`
+### 🔁 Connection Keepalive(MQTT underlying level, no SSH)
 Generally the default keepalive settings are usually working OK.
 The following options control connection keepalive on server:
 
@@ -202,14 +202,14 @@ On client mode keepalive is disabled, the SSH tunnel can detect dead connections
 
 ---
 
-### Command-Line Options
+### 🖥️ Command-Line Options
 
 ```
 mqtt-tunnel -h
 ```
 ---
 
-### Troubleshooting
+### 🛠️ Troubleshooting
 
 When connection issues arise, the first step is to enable debug logging to see what's happening. Add `"debug": true` to your config file:
 
@@ -247,9 +247,9 @@ The startup log lines show critical connection details:
 
 ---
 
-### `Security Considerations`
+### 🔒 Security Considerations
 
-⚠️ **This tool provides no encryption.** The MQTT tunnel itself is unencrypted.
+**This tool provides no encryption.** The MQTT tunnel itself is unencrypted.
 
 - **Always use SSH** (or another encrypted protocol) through the tunnel
 - The topic name acts as a shared secret. Use a (10 chars is OK) random string (generate with `-topic generate`)
@@ -259,14 +259,14 @@ The startup log lines show critical connection details:
 You can consider:
   - **Transport encryption (`mqtts://` or `wss://`):** Protects the topic name from eavesdropping on the wire, but adds latency. Since SSH is already end-to-end encrypted, you may prefer `mqtt://` for better performance. However, do your own tests.
 - **MQTT broker authentication:** Requires account to maintain, but prevents topic leakage. Public brokers offer zero-config convenience with no accounts to manage and easy server switching.
-- On open MQTT brokers the topic must be kept secret. Knowing the topic allows for DoS attacks and for accessing the SSH server (the login prompt). SSH key based login is very important for servers exposed to the Internet.
-- Even if a third party knows the topic, they **cannot decrypt** the session content since SSH encryption is end-to-end.
+- On open MQTT brokers the topic must be kept secret. Knowing the topic allows for DoS attacks and for accessing the SSH server (the login prompt). Always use SSH **key based** login, for servers exposed to the Internet.
+- Even if a third party knows the topic, they **cannot decrypt** the session contents since SSH encryption is end-to-end.
 
 > ⚠️ **Running as root is dangerous.** As a network server, mqtt-tunnel could theoretically be compromised, giving an attacker a shell. While Go's memory safety makes this unlikely, it is not impossible. **Never run mqtt-tunnel as root.** Create a dedicated user with minimal privileges (e.g., `useradd -r -s /sbin/nologin mqtt-tunnel`) and run the server as that user, and/or run with firejail.
 
 ---
 
-### Maintenance
+### 🔗 Alternative methods of login
 
 MQTT servers can have downtime. Also the protocol may change and you could lose access after an update. **Always maintain an alternative way to access your remote server**, such as:
 - [gonc](https://github.com/threatexpert/gonc) or another UDP hole-punching tool. It is better for long sessions/large files, but may need a little more time to connect. For Termux it is more friendly to your mobile data (direct connection, no MQTT overhead)
