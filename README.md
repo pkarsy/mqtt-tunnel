@@ -25,19 +25,19 @@ SSH proxy via MQTT
 
 ---
 
-### `🔧 Installation`
+### 🔧 Installation
 
 Binaries are provided in [releases page](https://github.com/yourusername/mqtt-tunnel/releases).
 
 This is the simplest possible installation, without login credentials and only a shared secret, the topic. Start with this for an easy setup, then you can modify as you wish.
 
-#### `1. Generate a random non guessagle topic`
+#### 1. Generate a random non guessagle topic
 
 >mqtt-tunnel -generate
 
 you can use a substring of this but not less than 8 chars, to avoid collissions(on open brokers).
 
-#### `2. 🌐 Configure the SSH server`
+#### 2. 🌐 Configure the SSH server
 
 On the remote SSH server and using a normal account(no root), create the file
 
@@ -49,7 +49,7 @@ On the remote SSH server and using a normal account(no root), create the file
     "server": ":22" // or "127.0.0.1:22" or ":8022" for termux, see the dedicated README_TERMUX
 }
 ```
-and interactivelly run:
+and interactivelly run (choose one):
 
 ```bash
 mqtt-tunnel -c server.json            # Looks for ~/.config/mqtt-tunnel/server.json only
@@ -60,7 +60,7 @@ mqtt-tunnel -c ./server.json          # looks in Current directory only
 **Leave it running**. We will see the negotiation when the client connects. At the end we will make the server autostart.
 
 
-#### `3. 🔐 Configuring the SSH client`
+#### 3. 🔐 Configuring the SSH client
 
 Create a file `~/.config/mqtt-tunnel/client.json`
 ```json
@@ -81,8 +81,9 @@ Add to your `~/.ssh/config`:
 Host remote-via-mqtt
     HostName remote-server
     ProxyCommand mqtt-tunnel -c client.json
+    # mqtt-tunnel(client) by default disables mqtt-keepalive
     # The following are optional but highly recommended, to easily detect broken connections.
-    # and in fact useful independently of mqtt-tunnel
+    # and in fact useful, independently of mqtt-tunnel
     ServerAliveInterval 10  # Send keepalive every 10 seconds
     ServerAliveCountMax 3  # Disconnect after 2 missed (10s total)
 ```
@@ -96,8 +97,7 @@ Congratulations !
 
 **Now we need some final actions:**
 
-
-#### `4. mqtt-tunnel on server autostart, and SSH fine tunning`
+#### 4. mqtt-tunnel on server autostart, and SSH fine tunning
 
 For example
 
@@ -122,7 +122,7 @@ ClientAliveInterval 60         # Check every minute
 ClientAliveCountMax 3          # Disconnect after 3 minutes of silence
 ```
 
-#### `5. Client fine tunning`
+#### 5. Client fine tunning
 By default in client mode the output is /dev/tty. Add the entry
 
 >"log-file": "~/mqtt-client.log"
@@ -167,7 +167,7 @@ In both cases do not use topics longer than necessary (let's say up to 10 chars)
 
 ---
 
-#### `Sample Configuration file`
+### `Sample Configuration file`
 
 Generate a sample config:
 
@@ -179,7 +179,7 @@ The config understands `$HOME/to/file` and `~/to/file` expansions.
 
 ---
 
-#### `Connection Keepalive(MQTT underlying level, no SSH)`
+### `Connection Keepalive(MQTT underlying level, no SSH)`
 Generally the default keepalive settings are usually working OK.
 The following options control connection keepalive on server:
 
@@ -200,14 +200,14 @@ On client mode keepalive is disabled, the SSH tunnel can detect dead connections
 
 ---
 
-#### Command-Line Options
+### Command-Line Options
 
 ```
 mqtt-tunnel -h
 ```
 ---
 
-#### Troubleshooting
+### Troubleshooting
 
 When connection issues arise, the first step is to enable debug logging to see what's happening. Add `"debug": true` to your config file:
 
@@ -245,7 +245,7 @@ The startup log lines show critical connection details:
 
 ---
 
-#### `Security Considerations`
+### `Security Considerations`
 
 ⚠️ **This tool provides no encryption.** The MQTT tunnel itself is unencrypted.
 
@@ -264,14 +264,16 @@ You can consider:
 
 ---
 
-#### Maintenance
+### Maintenance
 
 MQTT servers can have downtime. Also the protocol may change and you could lose access after an update. **Always maintain an alternative way to access your remote server**, such as:
 - [gonc](https://github.com/threatexpert/gonc) or another UDP hole-punching tool. It is better for long sessions/large files, but may need a little more time to connect. For Termux it is more friendly to your mobile data (direct connection, no MQTT overhead)
 - Traditional port forwarding or VPN
 - Another mqtt-tunnel instance connecting to a different server. I do not recommend this - it is confusing; you cannot tell with which instance you are connected.
 
-#### Connection Keepalive / Timeout Detection
+---
+
+### Connection Keepalive / Timeout Detection
 
 For fast detection of dead connections (especially useful when switching between networks), configure SSH keepalive with different values for client and server:
 
@@ -284,9 +286,9 @@ Host remote-via-mqtt
     ProxyCommand /path/to/mqtt-tunnel -c /path/to/config.json
 ```
 
-
-
 Then restart sshd
+
+---
 
 #### Semi automatic topic change with rotate-topic
 
@@ -309,7 +311,9 @@ The script resolves bare filenames to `~/.config/mqtt-tunnel/` (like mqtt-tunnel
 ---
 
 ### How It Works
+
 ![connection](connection.png)
+
 All negotiation is performed in the control topic (e.g., baseTopic/ctl) but the data are using 2 randomly generated topics baseTopic/ClientPubTopic and baseTopic/ServerPubTopic
 1. Client: subscribes to control topic
 2. Client → Server: connect (ID, version)  [ID generated by client]
