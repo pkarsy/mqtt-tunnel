@@ -1,14 +1,15 @@
-# mqtt-tunnel on Termux (Android)
+### mqtt-tunnel on Termux (Android)
 
-## Overview
+### Overview
 
-Running mqtt-tunnel on Android via Termux has some special considerations due to Android's power management (Doze mode) and wake lock behavior.
+Running mqtt-tunnel on Android via Termux has some special considerations due to Android's power management (Doze mode) and wake lock behavior. This readme is only about the special considerations on TERMUX, the documentation is in the README.md
 
-## Installation
+### Installation
+The termux binary is optimized (GOMAXPROCS=1, THREADS=10, builtin DNS) to avoid being killed by some Android systems. It is tested with Android 15 and 16 and Termux (F-Droid) without problems, but not all phones are the same.
 
-Binaries are provided in the [releases page](https://github.com/yourusername/mqtt-tunnel/releases). The termux binary is optimized (GOMAXPROCS=1, THREADS=10, builtin DNS) to avoid being killed by some Android systems. It is tested with Android 15 and 16 and Termux (F-Droid) without problems, but not all phones are the same.
+---
 
-## Manual Keepalive vs Paho Keepalive
+### Manual Keepalive vs Paho Keepalive
 
 ### The Problem with Paho Keepalive on Android
 
@@ -31,11 +32,11 @@ Example `termux-server.json`:
     "broker": "mqtt://broker.hivemq.com:1883",
     "topic": "your-topic",
     "server": ":8022",
-    "manual-keepalive": 60
+    "manual-keepalive": 60 // this is the default on termux y
 }
 ```
 
-Note: `manual-keepalive` defaults to 60 seconds on Termux, so you can omit it.
+Note: `manual-keepalive` defaults to 60 seconds on Termux, so you can omit it. If you do not have problems, keep the default.
 
 ### Trade-offs
 
@@ -44,7 +45,6 @@ Note: `manual-keepalive` defaults to 60 seconds on Termux, so you can omit it.
 - Higher CPU usage
 - More battery drain
 - More data usage
-- use it only if the default does not work.
 
 **Longer intervals (e.g., 60-120 seconds):**
 - Better battery life
@@ -52,22 +52,9 @@ Note: `manual-keepalive` defaults to 60 seconds on Termux, so you can omit it.
 - May allow Doze mode to activate between pings(but the server does not drop the connection). The response from the SSH server will be sluggish but the bettery will be preserved. When connected you can run "termux-wake-lock" and on disconnect "termux-wake-unlock"
 - Slower detection of connection issues (but 1-2 min is usually acceptable)
 
-### Recommendation
-
-- **With wake lock held**: Standard 60-second interval works well
-- **Without wake lock**: Use 60 seconds or shorter if you need more responsiveness
-- **Battery critical scenarios**: Use 120 seconds and accept occasional reconnections
-
-## Wake Lock Considerations
-
-Without a wake lock, Android may:
-- Delay timers (affecting Paho keepalive more than manual keepalive)
-- Suspend network connections
-- Kill background processes
-
 Using `manual-keepalive` with an appropriate interval helps maintain the connection without requiring a permanent wake lock.
 
-## Setup
+---
 
 ### Configure sshd keepalive in Termux
 
@@ -100,8 +87,10 @@ fi
 # Generate topic: mqtt-tunnel -generate
 # Place config in ~/.config/mqtt-tunnel/termux-server.json and run:
 /path/to/mqtt-tunnel -c termux-server.json
-
-# On laptop (~/.ssh/config):
+```
+On laptop (~/.ssh/config):
+```
+# 
 Host termux-phone
     HostName termux
     ServerAliveInterval 10
@@ -109,64 +98,37 @@ Host termux-phone
     ProxyCommand /path/to/mqtt-tunnel -c termux-client.json
 ```
 
-## Battery Optimization vs Connection Stability
+## Termux Optimizations and Connection Stability
 
 > **Note:** This section applies to **server mode** (config with `"server": ":8022"`
 > on your Termux device), which is the typical use case for Termux.
 
-**WARNING:** Fighting with Android battery optimizations can be very exhausting (without guarantee of success). The Android system generally speaking (depending on the provider) blocks long running processes and long running TCP connections. If you are not dependent on Termux, do not bother with all this.
+**WARNING:** Fighting with Android battery optimizations can be very exhausting (without guarantee of success).
 
-Android's Doze mode and power management can cause frequent MQTT disconnections (typically every 30-60 seconds). This varies significantly by:
+Android's Doze mode and power management can cause timeouts and slugish behaviour on termux. This varies significantly by:
 - Android version
 - OEM (Samsung, Xiaomi, Pixel, etc. have different strategies)
 - Battery optimization settings
 
-### Enable logging to diagnose disconnections
+### Solutions to try, probably combined
 
-Add to your config:
-```json
-{
-    "broker": "mqtt://broker.hivemq.com:1883",
-    "topic": "your-topic",
-    "server": ":8022",
-    "log-file": "~/mqtt-tunnel.log",
-    "debug": true
-}
-```
+1. **Disable battery optimization for Termux** (system setting)
+   Settings → Apps → Termux → Battery → Unrestricted
+   Also set the cellular data usage as "unrestricted" if yu want to login to your phone even on cellular data.
+   (Exact path varies by OEM)
+   You may need to find many different setting about battery/power optimizations. Search for your specific model.
 
-### Solutions to try (in order)
-
-1. **termux-wake-lock** (most reliable, higher battery drain)
+2. **Permanent termux-wake-lock** (higher battery drain)
    ```bash
    termux-wake-lock
    ```
-   Keeps CPU awake. The battery drain may (depending on phone) make the solution impractical.
+   Keeps CPU awake. SSH is very responsive. The battery drain may (depending on phone) may make the solution impractical.
 
-2. **Experiment with MQTT keepalive** (balance between battery and stability)
-   ```json
-   {
-       "broker": "mqtt://broker.hivemq.com:1883",
-       "topic": "your-topic",
-       "server": ":8022",
-       "mqtt-keepalive": 15,
-       "manual-keepalive": 15
-   }
-   ```
-   Shorter keepalive (15-20s) **may** prevent Doze from kicking in. In my phone it does not work at all.
-   
-   Experiment with values: 10, 15, 20, 30 seconds.
-   My phone (Android 16) works with `"manual-keepalive": 10`, without wake-lock.
-   Note this method eats some data from your plan.
 
-3. **Disable battery optimization for Termux** (system setting)
-   Settings → Apps → Termux → Battery → Unrestricted
-   Also set the cellular data usage as you wish
-   (Exact path varies by OEM)
-
-4. **Targeted approach**
+3. **Targeted approach**
    Use wakelock and start mqtt-tunnel only during active SSH sessions. It needs some manual intervention but generally works very well.
 
-**Note:** Every Android device behaves differently. You may need to experiment to find the right balance for your specific device.
+4. You can try different "manual-keepalive" values but is not tested, as the default value(60) seems to work OK.
 
 ## Timezone / Local Time in Logs
 
@@ -185,17 +147,3 @@ export TZ=Europe/Athens
 echo 'export TZ=Europe/Athens' >> ~/.bashrc
 ```
 
-Common timezone values: `Europe/Athens`, `Europe/London`, `America/New_York`, `Asia/Tokyo`,
-or use `EET`, `CET`, `EST` for short forms.
-
-## Example Use Cases
-
-```bash
-# Send notification to phone
-ssh termux-mqtt 'termux-notification -c "Remember the Milk"; echo Notification sent'
-
-# Copy to clipboard
-ssh termux-mqtt termux-clipboard-set MyPassword
-```
-
-Works the same on home or work, wifi or mobile data.
