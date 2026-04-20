@@ -1,4 +1,6 @@
-# mqtt-tunnel
+### mqtt-tunnel
+
+---
 
 SSH proxy via MQTT
 
@@ -131,7 +133,7 @@ in client.json to avoid seeing the mqtt-tunnel logs during SSH logins.
 
 ---
 
-### `✅ Topic Best Practices`
+### ✅ Topic Best Practices
 The topic does not contribute to the SSH security. 
 
 **For public MQTT brokers with no login credentials:**
@@ -290,7 +292,7 @@ Then restart sshd
 
 ---
 
-#### Semi automatic topic change with rotate-topic
+### Semi automatic topic change with rotate-topic
 
 The `rotate-topic` script helps rotate topics periodically for security:
 
