@@ -122,7 +122,7 @@ ClientAliveInterval 60         # Check every minute
 ClientAliveCountMax 3          # Disconnect after 3 minutes of silence
 ```
 
-#### 5. Client fine tunning
+#### `5. Client fine tunning`
 By default in client mode the output is /dev/tty. Add the entry
 
 >"log-file": "~/mqtt-client.log"
@@ -130,9 +130,8 @@ By default in client mode the output is /dev/tty. Add the entry
 in client.json to avoid seeing the mqtt-tunnel logs during SSH logins.
 
 ---
----
 
-### ✅ Topic Best Practices
+### `✅ Topic Best Practices`
 The topic does not contribute to the SSH security. 
 
 **For public MQTT brokers with no login credentials:**
@@ -149,7 +148,9 @@ There is no fighting for topics with all the other users, neither need to hide t
 
 In both cases do not use topics longer than necessary (let's say up to 10 chars), to avoid increasing the packet size.
 
-### 💡Supported broker URL formats
+---
+
+### `💡Supported broker URL formats`
 
 | URL Scheme | Description | Default Port |
 |------------|-------------|--------------|
@@ -164,21 +165,9 @@ In both cases do not use topics longer than necessary (let's say up to 10 chars)
 
 **These services are provided for the common good. Please use responsibly**. Avoid large file transfers or sustained high-bandwidth usage.
 
-
-
-### 4. ✓ Test the Connection
-
-To verify the tunnel works without using SSH:
-
-```bash
-mqtt-tunnel -c /path/to/client.json
-```
-
-If you can see the SSH server banner (e.g., `SSH-2.0-OpenSSH_8.9`), the tunnel is working
-
 ---
 
-#### Sample Configuration file
+#### `Sample Configuration file`
 
 Generate a sample config:
 
@@ -188,8 +177,10 @@ mqtt-tunnel -config help
 
 The config understands **$HOME/to/file** and "~/to/file" expansions.
 
-#### Keepalive Options
-Generally the default keepalive is working OK.
+---
+
+#### `Connection Keepalive(MQTT underlying level, no SSH)`
+Generally the default keepalive settings are usually working OK.
 The following options control connection keepalive on server:
 
 **mqtt-keepalive** (default is 60 seconds, set 0 or negative to disable)
@@ -205,11 +196,16 @@ The following options control connection keepalive on server:
 - Useful for Android/Termux where Doze mode interferes with standard keepalive. The problem is the Doze mode postpones the timers of the application, so a PINGRESP can be delayed(for many seconds/minutes) and the broker considers the socket dead.
 - **On Termux**, defaults to 60 seconds automatically. See [README_TERMUX.md](README_TERMUX.md)
 
+On client mode keepalive is disabled, the SSH tunnel can detect dead connections by itself. You can enable mqtt/manual keepalive if you wish but this is not tested at all.
+
+---
+
 #### Command-Line Options
 
 ```
 mqtt-tunnel -h
 ```
+---
 
 #### Troubleshooting
 
@@ -224,24 +220,18 @@ When connection issues arise, the first step is to enable debug logging to see w
 }
 ```
 
-Then run:
-
-```bash
-mqtt-tunnel -c client.json
-```
-
 **What to look for in the logs:**
 
 The startup log lines show critical connection details:
 ```
 2026/03/25 07:12:51 [INFO] Client mode
-2026/03/25 07:12:51 [INFO]   app-version=0.5.1
-2026/03/25 07:12:51 [INFO]   wire-protocol=2
+2026/03/25 07:12:51 [INFO]   app-version=0.8.0
+2026/03/25 07:12:51 [INFO]   wire-protocol=3
 2026/03/25 07:12:51 [INFO]   root-topic=Ktt91J5q
 ```
 
 - **app-version**: Check if the client matches your server version
-- **wire-protocol**: Must match between client and server (currently 2)
+- **wire-protocol**: Must match between client and server (currently 3)
 - **root-topic**: Verify this matches your server's topic
 
 
@@ -253,9 +243,11 @@ The startup log lines show critical connection details:
 - Check that the MQTT broker is accessible from both machines
 - For TLS issues, verify certificates are correct
 
-#### Security Considerations
+---
 
-> ⚠️ **This tool provides no encryption.** The MQTT tunnel itself is unencrypted.
+#### `Security Considerations`
+
+⚠️ **This tool provides no encryption.** The MQTT tunnel itself is unencrypted.
 
 - **Always use SSH** (or another encrypted protocol) through the tunnel
 - The topic name acts as a shared secret. Use a (10 chars is OK) random string (generate with `-topic generate`)
@@ -269,6 +261,8 @@ You can consider:
 - Even if a third party knows the topic, they **cannot decrypt** the session content since SSH encryption is end-to-end.
 
 > ⚠️ **Running as root is dangerous.** As a network server, mqtt-tunnel could theoretically be compromised, giving an attacker a shell. While Go's memory safety makes this unlikely, it is not impossible. **Never run mqtt-tunnel as root.** Create a dedicated user with minimal privileges (e.g., `useradd -r -s /sbin/nologin mqtt-tunnel`) and run the server as that user, and/or run with firejail.
+
+---
 
 #### Maintenance
 
@@ -312,6 +306,8 @@ files have the same topic.
 
 The script resolves bare filenames to `~/.config/mqtt-tunnel/` (like mqtt-tunnel itself) and ensures both files have matching topics before updating. See the script source for details.
 
+---
+
 ### How It Works
 ![connection](connection.png)
 All negotiation is performed in the control topic (e.g., baseTopic/ctl) but the data are using 2 randomly generated topics baseTopic/ClientPubTopic and baseTopic/ServerPubTopic
@@ -328,6 +324,8 @@ All negotiation is performed in the control topic (e.g., baseTopic/ctl) but the 
 11. Server: starts reading from SSH, publishing data to ServerPubTopic
 12. Client publishes to ClientPubTopic, so bidirectional data transfer begins.
 
+---
+
 ### Acknowledgments
 
 This project was originally inspired by [shirou/mqtunnel](https://github.com/shirou/mqtunnel). However, the two tools have diverged significantly:
@@ -337,6 +335,8 @@ This project was originally inspired by [shirou/mqtunnel](https://github.com/shi
 - **Focus:** This tool is specifically focused on SSH proxying (the local instance uses stdio for SSH ProxyCommand integration)
 
 The tools cannot be used interchangeably.
+
+---
 
 ### License
 
