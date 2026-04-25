@@ -122,7 +122,17 @@ func setupLog(verbose bool, logFile string, logFileSize int, isLocal bool, print
 			output = f
 		}
 	} else {
-		output = os.Stderr
+		// In client mode, try to use /dev/tty for logs so they appear on terminal
+		// This keeps stdout free for tunnel data
+		if isLocal {
+			if tty, err := os.OpenFile("/dev/tty", os.O_WRONLY, 0); err == nil {
+				output = tty
+			} else {
+				output = os.Stderr
+			}
+		} else {
+			output = os.Stderr
+		}
 	}
 
 	if isLocal {
@@ -251,12 +261,16 @@ func main() {
 	effectiveConfigFile = resolveConfigPath(effectiveConfigFile)
 
 	// Read config file
-	conf, err := tunnel.ReadConfig(effectiveConfigFile)
+	conf, configWarnings, err := tunnel.ReadConfig(effectiveConfigFile)
 	if err != nil {
+		// Print any warnings that were collected before the error
+		for _, warning := range configWarnings {
+			fmt.Fprintf(os.Stderr, "[WARN] %s\n", warning)
+		}
 		// Check if this is a bare filename (no path separators)
 		isBareFilename := !strings.ContainsAny(*configFile, "/\\") && *configFile != ""
 		isBareFilenameFull := !strings.ContainsAny(*configFileFull, "/\\") && *configFileFull != ""
-		
+
 		if isBareFilename || isBareFilenameFull {
 			// User provided a bare filename
 			bareName := *configFile
@@ -265,10 +279,10 @@ func main() {
 			}
 			home, _ := os.UserHomeDir()
 			lookedIn := filepath.Join(home, ".config", "mqtt-tunnel", bareName)
-			
+
 			fmt.Fprintf(os.Stderr, "Error: config file not found: %s\n", bareName)
 			fmt.Fprintf(os.Stderr, "Looked in: %s\n", lookedIn)
-			
+
 			// Check if file exists in current directory
 			if fileExists(bareName) {
 				fmt.Fprintf(os.Stderr, "\nFound ./%s in current directory.\n", bareName)
@@ -367,6 +381,11 @@ func main() {
 	// Setup logging
 	logOutput := setupLog(conf.Debug, conf.LogFile, conf.LogFileSize, !isServerMode, conf.PrintLines)
 
+	// Log any warnings from config parsing (now that logging is set up)
+	for _, warning := range configWarnings {
+		log.Printf("[WARN] %s", warning)
+	}
+
 	// Enable Paho debug if requested
 	if conf.Debug {
 		tunnel.SetDebugPahoLogging(true)
@@ -418,11 +437,15 @@ func main() {
 			effectiveConfigFile,
 			10*time.Second,
 			func() {
-				newConf, err := tunnel.ReadConfig(effectiveConfigFile)
+				newConf, reloadWarnings, err := tunnel.ReadConfig(effectiveConfigFile)
 				if err != nil {
 					log.Printf("[ERROR] Config reload failed: %v", err)
 					log.Printf("[INFO] Continuing with current config")
 					return
+				}
+				// Log any warnings from config parsing
+				for _, warning := range reloadWarnings {
+					log.Printf("[WARN] %s", warning)
 				}
 
 				// Apply defaults for reloaded config

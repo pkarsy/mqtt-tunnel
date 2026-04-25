@@ -148,13 +148,17 @@ ClientAliveCountMax 3          # Disconnect after 3 minutes of silence
 ```
 
 #### `STEP 5`. Client log file (optional)
-By default in client mode the output is `/dev/tty`. Add the entry
+By default in client mode the output is `/dev/tty` (on platforms supporting it). This is because:
+- `/dev/stderr` is hidden by the calling SSH client (unless using `ssh -v` for verbose mode)
+- `/dev/stdout` carries the SSH data stream, so logging there would corrupt the connection
+
+Add the entry
 
 ```json
 "log-file": "~/mqtt-client.log"
 ```
 
-in `client.json` to avoid seeing the mqtt-tunnel logs during SSH logins.
+in `client.json` to avoid seeing the mqtt-tunnel logs during SSH logins, or to log to a file instead of the terminal.
 
 ---
 

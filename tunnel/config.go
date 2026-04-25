@@ -36,13 +36,13 @@ type Config struct {
 	ClientCert string `json:"client-cert"`
 	PrivateKey string `json:"private-key"`
 
-	Topic      string `json:"topic"`
-	ServerAddr string `json:"server"`
-	LogFile    string `json:"log-file"`
-	LogFileSize int   `json:"log-file-size"` // Max log file size in bytes (default 50000). 0=default, negative=discard
-	Debug      bool   `json:"debug"`   // primary field for debug logging
-	Verbose    bool   `json:"verbose"` // deprecated alias for debug, kept for backward compatibility
-	PrintLines bool   `json:"print-lines"`
+	Topic       string `json:"topic"`
+	ServerAddr  string `json:"server"`
+	LogFile     string `json:"log-file"`
+	LogFileSize int    `json:"log-file-size"` // Max log file size in bytes (default 50000). 0=default, negative=discard
+	Debug       bool   `json:"debug"`         // primary field for debug logging
+	Verbose     bool   `json:"verbose"`       // deprecated alias for debug, kept for backward compatibility
+	PrintLines  bool   `json:"print-lines"`
 
 	// ConnectionTimeout is the maximum time to wait for tunnel establishment (in seconds)
 	// Default: 15 seconds
@@ -136,7 +136,7 @@ func stripJSONComments(data []byte) []byte {
 func fixJSONCommas(data []byte) ([]byte, []string) {
 	var warnings []string
 	lines := strings.Split(string(data), "\n")
-	
+
 	// Find all property line indices (lines with "key": value)
 	var propertyLines []int
 	for i, line := range lines {
@@ -150,55 +150,55 @@ func fixJSONCommas(data []byte) ([]byte, []string) {
 			propertyLines = append(propertyLines, i)
 		}
 	}
-	
+
 	if len(propertyLines) == 0 {
 		return data, warnings
 	}
-	
+
 	// Process each property line
 	for idx, lineIdx := range propertyLines {
 		line := lines[lineIdx]
 		trimmed := strings.TrimSpace(line)
 		isLastProperty := idx == len(propertyLines)-1
-		
+
 		if isLastProperty {
 			// Last property: should NOT have trailing comma
 			if strings.HasSuffix(trimmed, ",") {
 				// Remove trailing comma
 				lines[lineIdx] = line[:len(line)-1]
-				warnings = append(warnings, fmt.Sprintf("Config file has trailing comma at line %d. Removing it. Valid JSON does not allow trailing commas.", lineIdx+1))
+				warnings = append(warnings, fmt.Sprintf("Config file has trailing comma at line %d.", lineIdx+1))
 			}
 		} else {
 			// Not last property: should have trailing comma
 			if !strings.HasSuffix(trimmed, ",") {
 				// Add trailing comma
 				lines[lineIdx] = line + ","
-				warnings = append(warnings, fmt.Sprintf("Config file missing comma at line %d. Adding comma. Valid JSON requires commas between properties.", lineIdx+1))
+				warnings = append(warnings, fmt.Sprintf("Config file missing comma at line %d.", lineIdx+1))
 			}
 		}
 	}
-	
+
 	return []byte(strings.Join(lines, "\n")), warnings
 }
 
-func ReadConfig(filePath string) (Config, error) {
+func ReadConfig(filePath string) (Config, []string, error) {
 	var ret Config
 
 	buf, err := os.ReadFile(filePath)
 	if err != nil {
-		return ret, fmt.Errorf("read config error, %w", err)
+		return ret, nil, fmt.Errorf("read config error, %w", err)
 	}
 
 	// Strip JSONC-style comments (// and /* */) before parsing
 	cleanBuf := stripJSONComments(buf)
-	
+
 	// Fix missing/trailing commas and collect warnings
 	cleanBuf, commaWarnings := fixJSONCommas(cleanBuf)
 
 	// First, unmarshal into a map to check for unknown keys
 	var rawConfig map[string]interface{}
 	if err := json.Unmarshal(cleanBuf, &rawConfig); err != nil {
-		return ret, fmt.Errorf("invalid JSON: %w", err)
+		return ret, nil, fmt.Errorf("invalid JSON: %w", err)
 	}
 
 	// Define known keys
@@ -224,17 +224,12 @@ func ReadConfig(filePath string) (Config, error) {
 	// Check for unknown keys
 	for key := range rawConfig {
 		if !knownKeys[key] {
-			return ret, fmt.Errorf("unknown config key: %s", key)
+			return ret, commaWarnings, fmt.Errorf("unknown config key: %s", key)
 		}
 	}
 
 	if err := json.Unmarshal(cleanBuf, &ret); err != nil {
-		return ret, fmt.Errorf("read config marshal error: %w", err)
-	}
-	
-	// Print any comma-fix warnings
-	for _, warning := range commaWarnings {
-		fmt.Fprintf(os.Stderr, "[WARN] %s\n", warning)
+		return ret, commaWarnings, fmt.Errorf("read config marshal error: %w", err)
 	}
 
 	// Combine debug and verbose fields (verbose is deprecated alias for debug)
@@ -246,7 +241,7 @@ func ReadConfig(filePath string) (Config, error) {
 	ret.PrivateKey = expandPath(ret.PrivateKey)
 	ret.LogFile = expandPath(ret.LogFile)
 
-	return ret, nil
+	return ret, commaWarnings, nil
 }
 
 // expandPath expands ~ and environment variables in a path.
